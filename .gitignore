@@ -1,0 +1,17 @@
+# Gitignore file for futawilly
+# Private dirs
+git_ignored/
+secret/
+private/
+config/
+cfg/
+# Debug dirs
+debug/
+# Download dirs
+download/
+dl/
+# Work dirs
+temp/
+tmp/
+# Clutter files
+*.pyc

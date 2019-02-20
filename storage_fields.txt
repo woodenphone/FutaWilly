@@ -1,0 +1,114 @@
+This is intended to be a guideline for what each longterm storage data field will conatin.
+
+
+This is not an absolute directive to follow, but a brainstorming document.
+Things will be written as they get actually written.
+
+
+Considerations:
+Some content must be removed due to copyright/takedown/etc bullshit.
+Some content will get our server killed if present.
+Takedowns must be as swift as possible.
+Takedowns must ALWAYS be logged.
+In as many cases as possible, it should be possible to appeal a takedown and restore content.
+Deleting things is much more difficult than most users think.
+Removing rows from the DB may damage it.
+
+
+
+boolean deleted
+# "MUST not host"
+# This content may never be shown to any user who is not an administrator
+# Basically any copyright takedown will use this flag
+# If an appeal to a takedown is successful, the content may be restored by editing this.
+
+
+boolean banned
+# "MUST not fetch"
+# This content may not be downloaded.
+# I don't really know the usecase for this yet, but why not include it?
+# If this is set, downloads will not be performed, but no automatic purging will be done.
+
+
+boolean hard_banned
+# "MUST not exist"
+# This content is so undesirable that we cannot let it touch our machines
+# Anything with this flag set will not exist as more than metadata used to ensure it is not present.
+# A regular task should be performed to validate that this flag is adhered to.
+# This should only be used for massively dangerous data, such as C.P..
+# This should be 'loud' when used, to prevent abuse.
+
+
+
+
+Thread data:
+It has been suggested that PostgreSQL JSONB fields be used for this.
+Threads can consist of a dict with keys such as:
+thread_num: int
+first_post_num: int
+last_post_num: int
+first_fetched: datetime, seconds since epoch? UTC+0
+last_fetched: datetime, seconds since epoch? UTC+0
+posts: list of Post objects/dicts
+deleted: Has this been removed for visitors?
+banned: Will this not be fetched?
+hard_banned: Will this not only not be fetched, but erased if it ever is found to exist?
+
+Post data:
+Posts can consist of a dict with keys such as:
+post_num: int
+media: list of MediaInstance objects/dicts
+deleted: Has this been removed for visitors?
+banned: Will this not be fetched?
+hard_banned: Will this not only not be fetched, but erased if it ever is found to exist?
+
+MediaInstance data:
+MediaInstance objects/dicts are to permit multiple instances of a single file throughout a board/thread/post
+filename
+file_num
+mediafile: Foreign key referencing a MediaFile record
+deleted: Has this been removed for visitors?
+banned: Will this not be fetched?
+hard_banned: Will this not only not be fetched, but erased if it ever is found to exist?
+
+
+MediaFile data:
+The unique representation for a given media file, such as an image or audio file.
+MediaFile can consist of a dict with keys such as:
+md5b64: base64-encoded hash
+sha1b64: base64-encoded hash
+sha512b64: base64-encoded hash
+filesize: size in bytes
+fullsize_location: relative path to full media file
+replythumb_location: relative path to reply thumbnail file
+opthumb_location:relative path to OP thumbnail file
+deleted: Has this been removed for visitors?
+banned: Will this not be fetched?
+hard_banned: Will this not only not be fetched, but erased if it ever is found to exist?
+
+
+
+
+
+
+
+RemovalInfo data:
+Any record with a deleted, banned, hardbanned, ect flag MUST have an associated entry or it should be reset to not banned.
+There is no accapable case for not keeping records of removals.
+The record of any information being removed.
+date_removed: timestamp of the removal date
+removal_issuer_username: 
+removal_issuer_userid: 
+removal_issuer_ip: 
+removal_issuer_useragent: 
+reason_text: unicode string giving a human-readable explaination of why it was removed
+reason_tags: list of unicode strings giving tags about removal reason and other related information.
+reason_int: an aritrary number to associate a removal with a particular categoty
+
+
+
+
+
+
+
+
