@@ -1,0 +1,10 @@
+storage_notes.txt
+Notes on storage systems.
+
+
+postgresql was suggested, because of JSONB which can store a whole post or thread in one DB field.
+
+postgreSQL basic table structure:
+TODO
+
+

@@ -1,6 +1,14 @@
 # Main.py
 # Playground for now, later it can be something 
-
+# Imports
+# stdlib
+import os
+import logging
+import re
+# Remote libraries
+# Local modules
+import common
+import config
 
 # Load a thread from the API
 
@@ -37,3 +45,22 @@
 # TABLE global_media
 
 # TABLE global_thumbs
+
+
+
+
+
+
+def main():
+    pass
+
+
+if __name__ == '__main__':
+    common.setup_logging(os.path.join("debug", "main.log.txt"))# Setup logging
+    try:
+        main()
+    # Log exceptions
+    except Exception as e:
+        logging.critical(u"Unhandled exception!")
+        logging.exception(e)
+    logging.info(u"Program finished.")

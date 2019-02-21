@@ -1,0 +1,4 @@
+{
+    "telemetry.enableTelemetry": false,
+    "python.pythonPath": "/usr/bin/python3"
+}
