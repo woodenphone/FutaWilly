@@ -118,11 +118,11 @@ def fetch(requests_session, url, method='get', data=None, expect_status=200, hea
                 response = requests_session.post(url, headers=headers, data=data, timeout=300)
             else:
                 raise Exception('Unknown method')
-        except requests.exceptions.Timeout, err:
+        except requests.exceptions.Timeout as err:
             logging.exception(err)
             logging.error('Caught requests.exceptions.Timeout')
             continue
-        except requests.exceptions.ConnectionError, err:
+        except requests.exceptions.ConnectionError as err:
             logging.exception(err)
             logging.error('Caught requests.exceptions.ConnectionError')
             continue

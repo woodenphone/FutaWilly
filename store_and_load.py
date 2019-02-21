@@ -7,8 +7,8 @@ import os
 import logging
 # Remote libraries
 # Local modules
-import common# common.py
-import config.store_and_load_config as config# config/store_and_load_config.py
+import common
+import config.store_and_load_config as config
 
 
 
