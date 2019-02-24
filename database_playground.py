@@ -10,7 +10,7 @@ import logging
 import sqlalchemy
 # Local modules
 import common
-import config.database_playground as config
+import config.database_playground_config as config
 
 
 
@@ -20,7 +20,7 @@ import config.database_playground as config
 
 class Thread():
     """Table to represent a single infinitychan thread."""
-    # thread_num
+    thread_num = sqlalchemy.# thread_num
     # low_post_num
     # high_post_num
     # posts_json

@@ -5,6 +5,9 @@ secret/
 private/
 config/
 cfg/
+credentials/
+creds/
+cred/
 # Debug dirs
 debug/
 # Download dirs
