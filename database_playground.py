@@ -15,12 +15,12 @@ import config.database_playground_config as config
 
 
 
-
+# ===== ===== ===== =====
 # Core data tables
 
 class Thread():
     """Table to represent a single infinitychan thread."""
-    thread_num = sqlalchemy.# thread_num
+    thread_num = sqlalchemy# thread_num
     # low_post_num
     # high_post_num
     # posts_json
@@ -61,13 +61,15 @@ class Image():
 
 
 
-
+# ===== ===== ===== =====
 # Logs and hard-ban support
 #
 # Single-post removal
 class PostDeletion():
     """Table to represent single-post deletion events."""
     pass# TODO
+
+
 
 class PostBan():
     """Table to represent single-post bans."""
@@ -79,11 +81,15 @@ class PostBan():
     # reason-tags
     # ban-started
 # /Single-post removal
-#
+
+
+
 # Whole-thread removal
 class ThreadDeletion():
     """Table to represent whole-thread deletion events."""
     pass# TODO
+
+
 
 class ThreadBan():
     """Table to represent whole-thread bans."""
@@ -95,11 +101,14 @@ class ThreadBan():
     # reason-tags
     # ban-started
 # /Whole-thread removal
-#
+
+
 # Single-image removal
 class ImageDeletion():
     """Table to represent image deletion events."""
     pass# TODO
+
+
 
 class ImageBan():
     """Table to represent image bans."""
@@ -114,6 +123,8 @@ class ImageBan():
     # reason-tags
     # ban-started
     pass# TODO
+
+
 class ImageHardBan():
     """Table to represent image hard bans."""
     # size
