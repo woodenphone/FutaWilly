@@ -6,10 +6,12 @@
 import os
 import logging
 # Remote libraries
-import py8chan
+# Custom versions of remote libraries
+print('os.getcwd()={0!r}'.format(os.getcwd()))
+import py8chan_local_branch.py8chan.__init__ as py8chan
 # Local modules
 import common
-import config.fetch_api_json_config as config
+import config_fetch_api_json as config
 
 
 
