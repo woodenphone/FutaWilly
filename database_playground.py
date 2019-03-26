@@ -1,3 +1,4 @@
+#! /usr/bin/python3
 # database_playground.py
 # Database definistion and playground
 #
