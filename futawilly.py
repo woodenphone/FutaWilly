@@ -45,6 +45,15 @@ if __name__ == '__main__':
 
 
 
+def save_media_file(req_ses, base_dl_path, url, filename):
+    """Save a file to the media dir."""
+    intermediate_dir_1 =
+    filepath = os.path.join(base_dl_path, filename)
+
+def update_thread(db_ses, new_thread_data):
+    """Insert new post information to a thread's entry in the DB.
+    If the thread is not already in the DB, add it."""
+    return
 
 
 
@@ -86,8 +95,6 @@ if __name__ == '__main__':
 from sqlalchemy.ext.declarative import declarative_base
 Base = declarative_base()
 
-##from sqlalchemy import Column, Integer, String
-
 class Thread(Base):
     """This table is for any and all posts for this board"""
     __tablename__ = 'v_threads'# TODO FIXME: Make board-agnostic
@@ -117,6 +124,7 @@ class Image(Base):
     hash_sha256 = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# SHA256 hash of full file #TODO!
     hash_sha512 = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# SHA512 hash of full file #TODO!
     # Files on disk
+    file_extention = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# File extention of the fullview file.
     filename_full = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Fullsized media file
     filename_thumb_reply = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Thumbnail used in OP post (if applicable)
     filename_thumb_op = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Thumbnail used in reply post (if applicable)
@@ -128,17 +136,6 @@ class Image(Base):
     # Hacks (Like running this shit on more than one machine per single instance. Weird use cases and such.)
     # None yet.
 
-
-# ===== ===== ===== =====
-# Okay, let's pseudocode up the basic event loop
-# DEFINE current_threads AS local memory copy of threads, 'current' state that gets updated by 'new' remote data
-current_threads = {}
-
-
-# Initialize state
-board = py8chan.Board(board_name=config.board_name)
-
-# Load live threads list from DB?
 
 # ===== ===== ===== =====
 # Spinup DB
@@ -156,12 +153,9 @@ if db_dir:# Only try to create dir if a dir is given
         logging.info('Creating DB dir: {0}'.format(db_dir))
         os.makedirs(db_dir)
 
-
 ### PostgreSQL
 ### DB Configuration
 ##db_connection_string = ''
-
-
 
 # Start the DB engine
 engine = sqlalchemy.create_engine(
@@ -171,28 +165,29 @@ engine = sqlalchemy.create_engine(
 Base.metadata.create_all(engine, checkfirst=True)# Create tables based on classes. (checkfirst only creates if it doesn't exist already)
 logging.info('DB connection established.')
 
-
-
-
 # ===== ===== ===== =====
-# Load initial cache of threads
+# Cache of local threads
+# Initialize state
+# DEFINE current_threads AS local memory copy of threads, 'current' state that gets updated by 'new' remote data
+current_threads = {}
+# Load initial cache of threads TODO!
 # JSON file holding a relatively recent version of the threads.
 if not os.path.exists(json_threads_cache_filepath):
-    json.dump()
+    with open(json_threads_cache_filepath) as new_jf:
+        json.dump({}, new_jf)# Initialise as empty
 local_threads = json.load(json_threads_cache_filepath)
-
 
 # ===== ===== ===== =====
 # Start looping over remote threads
-
 loop_counter = 0
 while (True):
     loop_counter += 1
-    logging.debug('Loop iteration {0}'.format(loop_counter))
+    logging.debug('Thread check loop iteration {0}'.format(loop_counter))
 
     # Update from remote server
     logging.debug('Starting to update threads')
     # Threads list
+    board = py8chan.Board(board_name=config.board_name)
     threads = board.get_all_threads()
 
     # Check each thread that was listed against what we have.
@@ -223,17 +218,10 @@ while (True):
             # Store new version of thread
             logging.debug('Updating thread {0}'.format(thread.num))
 
+            logging.debug('Finished updating thread {0}'.format(thread.num))
+
     logging.debug('Finished updating threads')
     continue
-
-
-
-
-
-
-
-
-
 
 
 
