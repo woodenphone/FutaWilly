@@ -43,12 +43,26 @@ if __name__ == '__main__':
 # ===== ===== ===== =====
 # Functions
 
+def generate_media_filepath(base_path, media_type, filename):
+    a = filename[0:1]
+    b = filename[1:4]
+    filepath = os.path.join(base_path, media_type, a, b, filename)
+    return filepath
 
 
-def save_media_file(req_ses, base_dl_path, url, filename):
+def save_media_file(req_ses, base_path, media_type, url, filename):
     """Save a file to the media dir."""
-    intermediate_dir_1 =
-    filepath = os.path.join(base_dl_path, filename)
+    filepath = generate_media_filepath(base_path=base_path, media_type=media_type, filename=filename)
+    # Load remote file into RAM
+
+    # Save data to disk
+    return
+
+
+def save_post_media(db_ses, req_ses, base_path, boardname, post):
+    """Save media from a post, adding it to the DB"""
+    pass
+
 
 def update_thread(db_ses, new_thread_data):
     """Insert new post information to a thread's entry in the DB.
