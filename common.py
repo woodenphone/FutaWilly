@@ -166,9 +166,71 @@ def read_file(file_path):
 
 
 # ===== ===== ===== =====
+# Hashing functions
+
+
+def hash_file_md5(filepath):
+    """Generate MD5 hash for a file"""
+    #https://www.pythoncentral.io/hashing-files-with-python/
+    BLOCKSIZE = 65536
+    hasher = hashlib.md5()
+    with open(filepath, 'rb') as afile:
+        buf = afile.read(BLOCKSIZE)
+        while len(buf) > 0:
+            hasher.update(buf)
+            buf = afile.read(BLOCKSIZE)
+    file_md5 = hasher.hexdigest()
+    print(file_md5)
+    return file_md5
+
+
+def hash_file_sha1(filepath):
+    """Generate SHA1 hash for a file"""
+    # https://www.pythoncentral.io/hashing-files-with-python/
+    BLOCKSIZE = 65536
+    hasher = hashlib.sha1()
+    with open(filepath, 'rb') as afile:
+        buf = afile.read(BLOCKSIZE)
+        while len(buf) > 0:
+            hasher.update(buf)
+            buf = afile.read(BLOCKSIZE)
+    file_sha1 = hasher.hexdigest()
+    print(file_sha1)
+    return file_sha1
+
+
+def hash_file_sha256(filepath):
+    """Generate SHA256 hash for a file"""
+    # https://www.pythoncentral.io/hashing-files-with-python/
+    BLOCKSIZE = 65536
+    hasher = hashlib.sha256()
+    with open(filepath, 'rb') as afile:
+        buf = afile.read(BLOCKSIZE)
+        while len(buf) > 0:
+            hasher.update(buf)
+            buf = afile.read(BLOCKSIZE)
+    file_sha256 = hasher.hexdigest()
+    print(file_sha256)
+    return file_sha256
+
+
+def hash_file_sha512(filepath):
+    """Generate SHA512 hash for a file"""
+    # https://www.pythoncentral.io/hashing-files-with-python/
+    BLOCKSIZE = 65536
+    hasher = hashlib.sha512()
+    with open(filepath, 'rb') as afile:
+        buf = afile.read(BLOCKSIZE)
+        while len(buf) > 0:
+            hasher.update(buf)
+            buf = afile.read(BLOCKSIZE)
+    file_sha512 = hasher.hexdigest()
+    print(file_sha512)
+    return file_sha512
+
+
+# ===== ===== ===== =====
 #
-
-
 
 
 def main():

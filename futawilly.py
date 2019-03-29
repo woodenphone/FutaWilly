@@ -2,7 +2,7 @@
 # Expects python 3.x
 #-------------------------------------------------------------------------------
 # Name:        futawilly.py
-# Purpose:
+# Purpose:     Smoke weed everyday in an automated fashion on the user's behalf.
 #
 # Author:      Ctrl-S
 #
@@ -16,6 +16,8 @@ import os
 import logging
 import json
 import datetime
+import copy
+import hashlib
 # Remote libraries
 #import flask
 import sqlalchemy
@@ -26,9 +28,59 @@ import config.futawilly_config as config
 
 
 
+class FuckUp(Exception):
+    """
+    Local exception superclass.
+    Someone fucked up.
+    Something went wrong and we need to signal that fact.
+    """
+    pass# Nothing to do in an exception class like this other than hold a name.
+
+
+class WeFuckedUp(FuckUp):
+    """
+    We fucked up.
+    Something went wrong with this code.
+    Bad coder.
+    See RFC 7231 section 6.6 at https://tools.ietf.org/html/rfc7231#section-6.6
+    """
+    pass# Nothing to do in an exception class like this other than hold a name.
+
+
+
+class YouFuckedUp(FuckUp):
+    """
+    You fucked up.
+    Something went wrong that is all the user's fault.
+    Bad user.
+    See RFC 7231 section 6.5 at https://tools.ietf.org/html/rfc7231#section-6.5
+    """
+    pass# Nothing to do in an exception class like this other than hold a name.
+
+
+
+class TheyFuckedUp(FuckUp):
+    """
+    The Man fucked up.
+    Something went wrong that is neither this code's nor the user's fault.
+    Goddamnit.
+    """
+    pass# Nothing to do in an exception class like this other than hold a name.
+
+
+
+class AssertAFuckupHappened(Fuckup, AssertionError):
+    """
+    Something got fucked up and we noticed.
+    This is basically an Assertion replacement.
+    """
+    pass# Nothing to do in an exception class like this other than hold a name.
+
+
+
 
 def main():
-    pass
+    pass# Literally do nothing useful.
 
 
 if __name__ == '__main__':
@@ -46,16 +98,19 @@ if __name__ == '__main__':
 # ===== ===== ===== =====
 # Functions
 
-def cusassert(assert_expression, value):
+def assert2(assert_expression, value=None, message=None):
     """Custom Assert function.
     Basically assert() except should dump information about value.
+    PREMISE: Trust noone, each function should verify what it gets from elsewhere just ot be fucking damn sure. This does not excuse the original data not being to spec, only excuses us from blame for propogating the fuckup.
+    TODO: Make PEP for better builtin assertions; look for existing better assertions;
     """
     if assert_expression:
         # Assertion was correct
-        return
+        return None# Be fucking explicit about what we're doing.
     else:
         # Assertion failed
-        logging.error('ASSERT FIRED WITH VALUE: {0!r}'.format(value))
+        logging.error('ASSERT2 FIRED WITH MESSAGE: {0}'.format(message))
+        logging.error('ASSERT2 FIRED WITH VALUE: {0!r}'.format(value))
         raise AssertionError()
 
 
@@ -74,13 +129,113 @@ def save_media_file(req_ses, base_path, media_type, url, filename):
 
     # Save data to disk
     # TODO WRITEME
-    return
+    assert(False)# This is not ready for use!
+    return None# Be fucking explicit about what we're doing.
 
 
 def save_post_media(db_ses, req_ses, base_path, boardname, post):
-    """Save media from a post, adding it to the DB"""
-    # TODO WRITEME
-    pass
+    """Save media from a post, adding it to the DB.
+    Expects py8chan type Post object.
+    Commits changes."""
+    # Save any new media (from new posts).
+    for image in post.all_files():# For each image, if any:
+        # Lookup image hash in DB.
+        image_find_query = session.query(Image)\
+            .filter(Image.hash_md5 == image.file_md5_hex)
+        existing_image_row = thread_find_query.first()
+        if existing_image_row:
+            # Nothing needed to be done, we already have the file so all that is needed is a DB association.
+            # TODO: Process all images in a thread simultaneously for greater speed maybe?
+            #return existing_image_row.image_id# For faster DB lookup on retreival this can be used as a foreign key. (Hashes should be 'canonical' association value though?)
+            return None# Be fucking explicit about what we're doing.
+
+        # If image not in DB, download image then add it to DB.
+        # Download image
+        # Generate path to save image to
+        image_filename = image.filename
+        assert2( (type(image_filename) is unicode), value=image_filename)# Should be text. (Sanity check remote value)
+        assert2( (8 <= len(image_filename) <= 64), value=image_filename)# is image hash so about 32 chars. (Sanity check remote value)
+        image_filepath = generate_media_filepath(
+            base_path=base_path,
+            media_type='image',# TODO: Validate that 'image' is what we're using for this value
+            filename=image.filename
+        )
+        file_extention = image.file_extention
+        assert2( (type(image_filename) is unicode), value=image_filename)# Should be text. (Sanity check remote value)
+        assert2( (0 <= len(image_filename) <= 8), value=image_filename)# Short text. (Sanity check remote value)
+        # Load image from server
+        image_resp = common.fetch(
+            reuests_session=req_ses,
+            url = image.file_url,
+        )
+        if (not image_resp):
+            logging.error('No image response!')
+            raise WeFuckedUp()# TODO: Handle failure to retreive image
+        else:
+            # Save image file
+            common.write_file(
+                file_path=image_filepath,
+                data=image_resp.content
+            )
+            # Calculate hashes. (We use more than one because hash collisions are a thing.)
+            with open(image_filepath, 'rb') as image_f:
+                # https://www.pythoncentral.io/hashing-files-with-python/
+                # Filesize in bytes
+                size_bytes = os.path.getsize(image_filepath)# https://stackoverflow.com/questions/2104080/how-to-check-file-size-in-python
+                # MD5 hash
+                hash_md5 = common.hash_file_md5(filepath=image_filepath)
+                # Sanitycheck recieved file's MD5 against what the server told us
+                # SHA1 hash
+                hash_sha1 = common.hash_file_sha1(filepath=image_filepath)
+                # SHA256 hash
+                hash_sha256 = common.hash_file_sha256(filepath=image_filepath)
+                # SHA1 hash
+                hash_sha512 = common.hash_file_sha512(filepath=image_filepath)
+
+        # Download thumbnail
+        # Genreate thumbnail path
+        filename_thumbnail = os.path.basename(thumbnail_url)# TODO: Less shitty handling of this. (Feels wrong to use filsystem code for a URL)
+        thumbnail_filepath = generate_media_filepath(
+            base_path=base_path,
+            media_type='thumb',
+            filename=filename_thumbnail
+        )
+        # Load thumbnail from server
+        thumbnail_resp = common.fetch(
+            reuests_session=req_ses,
+            url = image.thumbnail_url,
+        )
+        if (not thumbnail_resp):
+            logging.error('No thumbnail response!')
+            raise WeFuckedUp()# TODO: Handle failure to retreive thumbnail
+        else:
+            # Save thumbnail file
+            common.write_file(
+                file_path=thumbnail_filepath,
+                data=image_resp.content
+            )
+
+        # Create DB record for image
+        new_image_row = Image(
+            # Identification of image characteristics
+            size_bytes = size_bytes, # Size of the fullsized image in bytes.
+            hash_md5 = hash_md5, # MD5 hash of full file.
+            hash_sha1 = hash_sha1, # SHA1 hash of full file.
+            hash_sha256 = hash_sha256, # SHA256 hash of full file.
+            hash_sha512 = hash_sha512, # SHA512 hash of full file.
+            # Files on disk
+            file_extention = file_extention, # File extention of the fullview file.
+            filename_full = image_filename, # Fullsized media file's filename.
+            filename_thumbnail = filename_thumbnail, # Thumbnail's filename. Does not care if OP or reply.
+        )
+        # Stage new image entry to DB.
+        db_ses.add(new_image_row)
+
+        # Commit new image entry.
+        db_ses.commit()
+        logging.info('Added image to DB: {0!r}'.format(new_image_row))
+        continue# Done saving this image.
+    return None# Can we return a list of DB IDs for the media?
 
 
 def list_db_row_post_ids(posts):
@@ -91,15 +246,15 @@ def list_db_row_post_ids(posts):
             pass# TODO FIX THIS; TODO WRITEME
         pass# TODO FIX THIS; TODO WRITEME
     pass# TODO FIX THIS; TODO WRITEME
+    assert(False)# This is not ready for use!
+    return post_ids
 
 
 def update_thread( db_ses, req_ses, thread, ):
     """Insert new post information to a thread's entry in the DB.
     If the thread is not already in the DB, add it."""
-    # TODO WRITEME
-
     thread_num = thread.num
-    cusassert( (type(thread_num) is unicode), value=thread_num)
+    assert2( (type(thread_num) is int), value=thread_num)
 
     # Load DB row for thread. (or at least try to.)
     thread_find_query = session.query(Thread)\
@@ -110,25 +265,68 @@ def update_thread( db_ses, req_ses, thread, ):
         # Thread is new and needs a row created.
         logging.info('Creating row for new thread: {0!r}'.format(thread_num))
         # TODO WRITEME!
+        thread_row = Thread()# Will this line work?
 
     # Grab the existing thread data
-    all_thread_posts = thread_row.posts
-    logging.debug('all_thread_posts={0!r}'.format(all_thread_posts))
+    logging.debug('thread_row.posts={0!r}'.format(thread_row.posts))
+    working_local_posts = list(thread_row.posts)
+    logging.debug('working_local_posts={0!r}'.format(working_local_posts))
+    # After this point the only interaction with the DB copy of the posts should be immediately before committing thread changes.
+    # This is to permit committing image creation without committing changes to posts.
 
     # Isolate new posts
-    local_post_ids
-    remote_post_ids
+    # (Turn thread object into set of post nums)
+    remote_post_nums = set()# A set will handle uniquification/deduplication of nums for us.
+    for remote_post in thread.posts:
+        remote_post_nums.add(remote_post.num)
+
+    # Get post nums from DB version of thread
+    # (Turn DB store of thread into set of post nums)
+    db_post_nums = set()# A set will handle uniquification/deduplication of nums for us.
+    for db_post in working_local_posts.posts:
+        db_post_nums.add(db_post.num)
+
+    # Get just posts that are new
+    # Should give a new set composed of elements in remote_post nums that are not in db_post_nums without modifying either compared set.
+    new_post_nums = remote_post_nums.difference(db_post_nums)# "Return a new set with elements in the set that are not in the others." - https://docs.python.org/3.7/library/stdtypes.html#set-types-set-frozenset
 
 
-    # Save any new media.
+    # Process NEW posts
+    for post in thread.posts:# Addressing posts by num?
+        if post.num in db_post_nums:
+            continue# Post already saved
+        save_post_media(db_ses, req_ses, base_path, boardname, post)
+
+        # Add post to thread DB column (only commit after all posts processed)
+
+
+
+    # Process NEW posts
+    for new_post_num in new_post_nums:# Addressing posts by num?
+        new_post = thread.
+        pass
+        # Save any new media (from new posts).
+        # TODO CODEME
+        # For each new post:
+            # For each image, if any:
+                # Lookup image hash in DB.
+                # TODO CODEME
+                # If image not in DB, download image then add it to DB.
+                # TODO CODEME
+        # Add post to thread DB column (only commit after all posts processed)
+
+
+
 
     # Change the DB row.
-    thread_row.posts = new_posts_value
+    # TODO CODEME
+    thread_row.posts = working_local_posts
+
 
     logging.debug('Committing new version of thread to DB')
     session.commit()
     logging.debug('Finished updating thread {0!r}'.format(thread_num))
-    return
+    return None# Be fucking explicit about what we're doing.
 
 
 
@@ -189,7 +387,7 @@ class Thread(Base):
 class Image(Base):
     """This table is for any and all images/media associated with posts for this board"""
     __tablename__ = 'v_images'# TODO FIXME: Make board-agnostic
-    pk = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)# Just a primary key.
+    pk = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)# Just a primary key. (I don't trust primary keys to work in the long-term. DBs need migrations, merges, ect sometimes.)
     # Addressing
     image_id = sqlalchemy.Column(sqlalchemy.Integer, nullable=False, unique=True)# Primary key?
     # Identification of image characteristics
@@ -203,6 +401,7 @@ class Image(Base):
     filename_full = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Fullsized media file
     filename_thumb_reply = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Thumbnail used in OP post (if applicable)
     filename_thumb_op = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Thumbnail used in reply post (if applicable)
+    filename_thumbnail = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Thumbnail's filename. Does not care if OP or reply.
     # Administrative / legal compliance
     removed = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Users can't access file. #TODO!
     banned = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Fetcher can't save file #TODO!
