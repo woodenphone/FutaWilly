@@ -22,6 +22,7 @@ import hashlib
 #import flask
 import sqlalchemy
 import py8chan
+import requests
 # Local modules
 import common
 import config.futawilly_config as config
@@ -69,7 +70,7 @@ class TheyFuckedUp(FuckUp):
 
 
 
-class AssertAFuckupHappened(Fuckup, AssertionError):
+class AssertAFuckupHappened(FuckUp, AssertionError):
     """
     Something got fucked up and we noticed.
     This is basically an Assertion replacement.
@@ -98,8 +99,12 @@ if __name__ == '__main__':
 # ===== ===== ===== =====
 # Functions
 
-def assert2(assert_expression, value=None, message=None):
+def assert2(exp, value=None, msg=None):
     """Custom Assert function.
+    exp: Assert fires if not True.
+    value: Value that is being tested, logged via logging when assert fires.
+    msg: Message explaining the assertion to be logged along with the value when assert fires.
+
     Basically assert() except should dump information about value.
     PREMISE: Trust noone, each function should verify what it gets from elsewhere just ot be fucking damn sure. This does not excuse the original data not being to spec, only excuses us from blame for propogating the fuckup.
     TODO: Make PEP for better builtin assertions; look for existing better assertions;
@@ -124,11 +129,21 @@ def generate_media_filepath(base_path, media_type, filename):
 def save_media_file(req_ses, base_path, media_type, url, filename):
     """Save a file to the media dir."""
     filepath = generate_media_filepath(base_path=base_path, media_type=media_type, filename=filename)
-    # Load remote file into RAM
-    # TODO WRITEME
-
-    # Save data to disk
-    # TODO WRITEME
+    logging.debug('save_media_file() url={0!r}; filename={1!r};'.format(url, filename))
+    # Load image from server
+    media_resp = common.fetch(
+        reuests_session=req_ses,
+        url = url,
+    )
+    if (not media_resp):
+        logging.error('No media response!')
+        raise WeFuckedUp()# TODO: Handle failure to retreive image
+    else:
+        # Save image file
+        common.write_file(
+            file_path=filepath,
+            data=media_resp.content
+        )
     assert(False)# This is not ready for use!
     return None# Be fucking explicit about what we're doing.
 
@@ -148,7 +163,6 @@ def save_post_media(db_ses, req_ses, base_path, boardname, post):
             # TODO: Process all images in a thread simultaneously for greater speed maybe?
             #return existing_image_row.image_id# For faster DB lookup on retreival this can be used as a foreign key. (Hashes should be 'canonical' association value though?)
             return None# Be fucking explicit about what we're doing.
-
         # If image not in DB, download image then add it to DB.
         # Download image
         # Generate path to save image to
@@ -161,12 +175,16 @@ def save_post_media(db_ses, req_ses, base_path, boardname, post):
             filename=image.filename
         )
         file_extention = image.file_extention
-        assert2( (type(image_filename) is unicode), value=image_filename)# Should be text. (Sanity check remote value)
-        assert2( (0 <= len(image_filename) <= 8), value=image_filename)# Short text. (Sanity check remote value)
+        assert2( (type(file_extention) is unicode), value=file_extention)# Should be text. (Sanity check remote value)
+        assert2( (0 <= len(file_extention) <= 8), value=file_extention)# Short text. (Sanity check remote value)
+        image_url = image.file_url
+        assert2( (type(image_url) is unicode), value=image_url)# Should be text. (Sanity check remote value)
+        assert2( (16 <= len(image_url) <= 256), value=image_url)# Short text. (Sanity check remote value)
         # Load image from server
+        logging.debug('save_post_media() image_url={0!r}; image_filepath={1!r};'.format(image_url, image_filepath))
         image_resp = common.fetch(
             reuests_session=req_ses,
-            url = image.file_url,
+            url = image_url,
         )
         if (not image_resp):
             logging.error('No image response!')
@@ -214,7 +232,6 @@ def save_post_media(db_ses, req_ses, base_path, boardname, post):
                 file_path=thumbnail_filepath,
                 data=image_resp.content
             )
-
         # Create DB record for image
         new_image_row = Image(
             # Identification of image characteristics
@@ -230,7 +247,6 @@ def save_post_media(db_ses, req_ses, base_path, boardname, post):
         )
         # Stage new image entry to DB.
         db_ses.add(new_image_row)
-
         # Commit new image entry.
         db_ses.commit()
         logging.info('Added image to DB: {0!r}'.format(new_image_row))
@@ -253,7 +269,9 @@ def list_db_row_post_ids(posts):
 def update_thread( db_ses, req_ses, thread, ):
     """Insert new post information to a thread's entry in the DB.
     If the thread is not already in the DB, add it."""
-    thread_num = thread.num
+    logging.debug('update_thread() thread={0!r}'.format(thread))
+    print('BREAKPOINT')
+    thread_num = thread.id
     assert2( (type(thread_num) is int), value=thread_num)
 
     # Load DB row for thread. (or at least try to.)
@@ -293,30 +311,16 @@ def update_thread( db_ses, req_ses, thread, ):
 
     # Process NEW posts
     for post in thread.posts:# Addressing posts by num?
-        if post.num in db_post_nums:
+        post_num = pos.num
+        logging.debug('update_thread() currently testing post_num={0!r}'.format(post_num))
+        if post_num in db_post_nums:
             continue# Post already saved
         save_post_media(db_ses, req_ses, base_path, boardname, post)
 
         # Add post to thread DB column (only commit after all posts processed)
-
-
-
-    # Process NEW posts
-    for new_post_num in new_post_nums:# Addressing posts by num?
-        new_post = thread.
-        pass
-        # Save any new media (from new posts).
-        # TODO CODEME
-        # For each new post:
-            # For each image, if any:
-                # Lookup image hash in DB.
-                # TODO CODEME
-                # If image not in DB, download image then add it to DB.
-                # TODO CODEME
-        # Add post to thread DB column (only commit after all posts processed)
-
-
-
+        # TODO WRITEME
+        assert(False)# TODO
+        working_local_posts.append(post._data)# HACK AND SHOULD BE CHANGED! TODO: IMPROVE THIS
 
     # Change the DB row.
     # TODO CODEME
@@ -447,6 +451,7 @@ Base.metadata.create_all(engine, checkfirst=True)# Create tables based on classe
 logging.debug('Creating DB session.')
 Session = sqlalchemy.orm.sessionmaker(bind=engine)
 session = Session()
+db_ses = session# TEMPORARY! TODO: Move shit into functions so we can remove this
 
 logging.info('DB connection established.')
 
@@ -508,6 +513,11 @@ example_cached_thread = {
 }
 
 
+# ===== ===== ===== =====
+# Setup requests session
+req_ses = requests.session()
+
+
 
 # ===== ===== ===== =====
 # Start looping over remote threads
@@ -523,16 +533,18 @@ while (True):
     # Threads list
     board = py8chan.Board(board_name=config.board_name)
     threads = board.get_all_threads()
+    logging.debug('threads={0!r}'.format(threads))
     print('BREAKPOINT')
 
     # Check each thread that was listed against what we have.
     # - If new.latest_post > local.latest_post: reprocess thread. Otherwise thread is unchanged.
     for thread in threads:
+        logging.debug('thread={0!r}'.format(thread))
         do_thread_update = False# Should this thread be updated this cycle?
         print('BREAKPOINT')
         # Is thread updated?
         # Compare last post number
-        thread_number = thread.num
+        thread_number = thread.id
         try:
             current_thread = local_threads[thread_number]
         except KeyError:
@@ -543,9 +555,11 @@ while (True):
             do_thread_update = True
 
         # Compare the last post of each version of the thread against each other
-        if thread.replies[-1].post_id != current_thread.replies[-1].post_id:
-            logging.debug('New post detected in thread')
-            do_thread_update = True
+        if (len(thread.replies) != 0):
+            # Only check last post numbers if there is at least one reply
+            if (thread.replies[-1].post_id != current_thread.replies[-1].post_id):
+                logging.debug('New post detected in thread')
+                do_thread_update = True
 
         if do_thread_update:
             # Updated threads need updating.
