@@ -109,12 +109,12 @@ def assert2(exp, value=None, msg=None):
     PREMISE: Trust noone, each function should verify what it gets from elsewhere just ot be fucking damn sure. This does not excuse the original data not being to spec, only excuses us from blame for propogating the fuckup.
     TODO: Make PEP for better builtin assertions; look for existing better assertions;
     """
-    if assert_expression:
+    if exp:
         # Assertion was correct
         return None# Be fucking explicit about what we're doing.
     else:
         # Assertion failed
-        logging.error('ASSERT2 FIRED WITH MESSAGE: {0}'.format(message))
+        logging.error('ASSERT2 FIRED WITH MESSAGE: {0}'.format(msg))
         logging.error('ASSERT2 FIRED WITH VALUE: {0!r}'.format(value))
         raise AssertionError()
 
@@ -148,7 +148,7 @@ def save_media_file(req_ses, base_path, media_type, url, filename):
     return None# Be fucking explicit about what we're doing.
 
 
-def save_post_media(db_ses, req_ses, base_path, boardname, post):
+def save_post_media(db_ses, req_ses, base_path, board_name, post):
     """Save media from a post, adding it to the DB.
     Expects py8chan type Post object.
     Commits changes."""
@@ -157,7 +157,7 @@ def save_post_media(db_ses, req_ses, base_path, boardname, post):
         # Lookup image hash in DB.
         image_find_query = session.query(Image)\
             .filter(Image.hash_md5 == image.file_md5_hex)
-        existing_image_row = thread_find_query.first()
+        existing_image_row = image_find_query.first()
         if existing_image_row:
             # Nothing needed to be done, we already have the file so all that is needed is a DB association.
             # TODO: Process all images in a thread simultaneously for greater speed maybe?
@@ -169,6 +169,7 @@ def save_post_media(db_ses, req_ses, base_path, boardname, post):
         image_filename = image.filename
         assert2( (type(image_filename) is unicode), value=image_filename)# Should be text. (Sanity check remote value)
         assert2( (8 <= len(image_filename) <= 64), value=image_filename)# is image hash so about 32 chars. (Sanity check remote value)
+        board_path = os.path.join(base_path, board_name)
         image_filepath = generate_media_filepath(
             base_path=base_path,
             media_type='image',# TODO: Validate that 'image' is what we're using for this value
@@ -266,7 +267,7 @@ def list_db_row_post_ids(posts):
     return post_ids
 
 
-def update_thread( db_ses, req_ses, thread, ):
+def update_thread( db_ses, req_ses, thread, base_path, board_name,):
     """Insert new post information to a thread's entry in the DB.
     If the thread is not already in the DB, add it."""
     logging.debug('update_thread() thread={0!r}'.format(thread))
@@ -279,15 +280,18 @@ def update_thread( db_ses, req_ses, thread, ):
     .filter(Thread.thread_num == thread_num)
     thread_row = thread_find_query.first()
 
-    if not thread_row:
+    if (thread_row):
+        # Grab the existing thread data
+        logging.debug('thread_row.posts={0!r}'.format(thread_row.posts))
+        working_local_posts = list(thread_row.posts)
+    else:
         # Thread is new and needs a row created.
         logging.info('Creating row for new thread: {0!r}'.format(thread_num))
         # TODO WRITEME!
         thread_row = Thread()# Will this line work?
+        working_local_posts = []
 
-    # Grab the existing thread data
-    logging.debug('thread_row.posts={0!r}'.format(thread_row.posts))
-    working_local_posts = list(thread_row.posts)
+
     logging.debug('working_local_posts={0!r}'.format(working_local_posts))
     # After this point the only interaction with the DB copy of the posts should be immediately before committing thread changes.
     # This is to permit committing image creation without committing changes to posts.
@@ -301,7 +305,7 @@ def update_thread( db_ses, req_ses, thread, ):
     # Get post nums from DB version of thread
     # (Turn DB store of thread into set of post nums)
     db_post_nums = set()# A set will handle uniquification/deduplication of nums for us.
-    for db_post in working_local_posts.posts:
+    for db_post in working_local_posts:
         db_post_nums.add(db_post.num)
 
     # Get just posts that are new
@@ -311,11 +315,17 @@ def update_thread( db_ses, req_ses, thread, ):
 
     # Process NEW posts
     for post in thread.posts:# Addressing posts by num?
-        post_num = pos.num
+        post_num = post.num
         logging.debug('update_thread() currently testing post_num={0!r}'.format(post_num))
         if post_num in db_post_nums:
             continue# Post already saved
-        save_post_media(db_ses, req_ses, base_path, boardname, post)
+        save_post_media(
+            db_ses=db_ses,
+            req_ses=req_ses,
+            base_path=base_path,
+            board_name=board_name,
+            post=post
+        )
 
         # Add post to thread DB column (only commit after all posts processed)
         # TODO WRITEME
@@ -521,6 +531,8 @@ req_ses = requests.session()
 
 # ===== ===== ===== =====
 # Start looping over remote threads
+base_path = config.media_base_path
+board_name = config.board_name
 loop_counter = 0
 while (True):
     loop_counter += 1
@@ -570,7 +582,9 @@ while (True):
             update_thread(
                 db_ses=db_ses,
                 req_ses=req_ses,
-                thread = thread,
+                thread=thread,
+                base_path=base_path,
+                board_name=board_name,
             )
             logging.debug('Finished updating thread {0}'.format(thread.num))
 
