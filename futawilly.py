@@ -18,6 +18,8 @@ import json
 import datetime
 import copy
 import hashlib
+import base64
+import binascii
 # Remote libraries
 #import flask
 import sqlalchemy
@@ -26,56 +28,7 @@ import requests
 # Local modules
 import common
 import config.futawilly_config as config
-
-
-
-class FuckUp(Exception):
-    """
-    Local exception superclass.
-    Someone fucked up.
-    Something went wrong and we need to signal that fact.
-    """
-    pass# Nothing to do in an exception class like this other than hold a name.
-
-
-class WeFuckedUp(FuckUp):
-    """
-    We fucked up.
-    Something went wrong with this code.
-    Bad coder.
-    See RFC 7231 section 6.6 at https://tools.ietf.org/html/rfc7231#section-6.6
-    """
-    pass# Nothing to do in an exception class like this other than hold a name.
-
-
-
-class YouFuckedUp(FuckUp):
-    """
-    You fucked up.
-    Something went wrong that is all the user's fault.
-    Bad user.
-    See RFC 7231 section 6.5 at https://tools.ietf.org/html/rfc7231#section-6.5
-    """
-    pass# Nothing to do in an exception class like this other than hold a name.
-
-
-
-class TheyFuckedUp(FuckUp):
-    """
-    The Man fucked up.
-    Something went wrong that is neither this code's nor the user's fault.
-    Goddamnit.
-    """
-    pass# Nothing to do in an exception class like this other than hold a name.
-
-
-
-class AssertAFuckupHappened(FuckUp, AssertionError):
-    """
-    Something got fucked up and we noticed.
-    This is basically an Assertion replacement.
-    """
-    pass# Nothing to do in an exception class like this other than hold a name.
+from fuckups import *# Local assertions
 
 
 
@@ -99,10 +52,9 @@ if __name__ == '__main__':
 # ===== ===== ===== =====
 # Functions
 
-def assert2(exp, value=None, msg=None):
+def assert2(exp, msg=None, value=None):# THIS IS A DISTRACTION! LEAVE IT BE!
     """Custom Assert function.
     exp: Assert fires if not True.
-    value: Value that is being tested, logged via logging when assert fires.
     msg: Message explaining the assertion to be logged along with the value when assert fires.
 
     Basically assert() except should dump information about value.
@@ -115,7 +67,7 @@ def assert2(exp, value=None, msg=None):
     else:
         # Assertion failed
         logging.error('ASSERT2 FIRED WITH MESSAGE: {0}'.format(msg))
-        logging.error('ASSERT2 FIRED WITH VALUE: {0!r}'.format(value))
+        logging.error('ASSERT2 FIRED WITH value: {0!r}'.format(value))
         raise AssertionError()
 
 
@@ -132,7 +84,7 @@ def save_media_file(req_ses, base_path, media_type, url, filename):
     logging.debug('save_media_file() url={0!r}; filename={1!r};'.format(url, filename))
     # Load image from server
     media_resp = common.fetch(
-        reuests_session=req_ses,
+        requests_session=req_ses,
         url = url,
     )
     if (not media_resp):
@@ -167,51 +119,59 @@ def save_post_media(db_ses, req_ses, base_path, board_name, post):
         # Download image
         # Generate path to save image to
         image_filename = image.filename
-        assert2( (type(image_filename) is unicode), value=image_filename)# Should be text. (Sanity check remote value)
-        assert2( (8 <= len(image_filename) <= 64), value=image_filename)# is image hash so about 32 chars. (Sanity check remote value)
+        assert2( (type(image_filename) is str), value=image_filename)# Should be text. (Sanity check remote value)
+        assert2( (8 <= len(image_filename) <= 128), value=image_filename)# is image hash so about 64 chars. (Sanity check remote value)
         board_path = os.path.join(base_path, board_name)
         image_filepath = generate_media_filepath(
             base_path=base_path,
             media_type='image',# TODO: Validate that 'image' is what we're using for this value
             filename=image.filename
         )
-        file_extention = image.file_extention
-        assert2( (type(file_extention) is unicode), value=file_extention)# Should be text. (Sanity check remote value)
-        assert2( (0 <= len(file_extention) <= 8), value=file_extention)# Short text. (Sanity check remote value)
+        file_extension = image.file_extension
+        assert2( (type(file_extension) is str), value=file_extension)# Should be text. (Sanity check remote value)
+        assert2( (0 <= len(file_extension) <= 16), value=file_extension)# Short text. (Sanity check remote value)
         image_url = image.file_url
-        assert2( (type(image_url) is unicode), value=image_url)# Should be text. (Sanity check remote value)
-        assert2( (16 <= len(image_url) <= 256), value=image_url)# Short text. (Sanity check remote value)
+        assert2( (type(image_url) is str), image_url)# Should be text. (Sanity check remote value)
+        assert2( (16 <= len(image_url) <= 256), image_url)# Short text. (Sanity check remote value)
         # Load image from server
-        logging.debug('save_post_media() image_url={0!r}; image_filepath={1!r};'.format(image_url, image_filepath))
-        image_resp = common.fetch(
-            reuests_session=req_ses,
-            url = image_url,
-        )
-        if (not image_resp):
-            logging.error('No image response!')
-            raise WeFuckedUp()# TODO: Handle failure to retreive image
-        else:
-            # Save image file
-            common.write_file(
-                file_path=image_filepath,
-                data=image_resp.content
+        try:
+            logging.debug('save_post_media() image_url={0!r}; image_filepath={1!r};'.format(image_url, image_filepath))
+            image_resp = common.fetch(
+                requests_session=req_ses,
+                url = image_url,
             )
-            # Calculate hashes. (We use more than one because hash collisions are a thing.)
-            with open(image_filepath, 'rb') as image_f:
-                # https://www.pythoncentral.io/hashing-files-with-python/
-                # Filesize in bytes
-                size_bytes = os.path.getsize(image_filepath)# https://stackoverflow.com/questions/2104080/how-to-check-file-size-in-python
-                # MD5 hash
-                hash_md5 = common.hash_file_md5(filepath=image_filepath)
-                # Sanitycheck recieved file's MD5 against what the server told us
-                # SHA1 hash
-                hash_sha1 = common.hash_file_sha1(filepath=image_filepath)
-                # SHA256 hash
-                hash_sha256 = common.hash_file_sha256(filepath=image_filepath)
-                # SHA1 hash
-                hash_sha512 = common.hash_file_sha512(filepath=image_filepath)
+        except common.FetchGot404 as err:
+            logging.exception(err)
+            logging.warning('Could not fetch primary remote file, skipping this image.')
+            continue# Skip handling of this image download.
+        # Save image file
+        common.write_file(
+            file_path=image_filepath,
+            data=image_resp.content
+        )
+        # Calculate hashes. (We use more than one because hash collisions are a thing.)
+        with open(image_filepath, 'rb') as image_f:
+            # https://www.pythoncentral.io/hashing-files-with-python/
+            # Filesize in bytes
+            size_bytes = os.path.getsize(image_filepath)# https://stackoverflow.com/questions/2104080/how-to-check-file-size-in-python
+            hash_md5 = common.hash_file_md5(filepath=image_filepath)
+            hash_sha1 = common.hash_file_sha1(filepath=image_filepath)
+            hash_sha256 = common.hash_file_sha256(filepath=image_filepath)
+            hash_sha512 = common.hash_file_sha512(filepath=image_filepath)
+
+        print('BREAKPOINT before md5 check')
+        # Sanitycheck recieved file's MD5 against what the server told us. (Do we really need to do this? Does having this check make us less reliable?)
+        md5_algorithm_works = (hash_md5 == image.file_md5)
+        if (not md5_algorithm_works):
+            logging.warning('MD5 IMPLIMENTATION IN USE IS NOT CONSISTENT WITH EXPECTED DATA! DO NOT USE IN PRODUCTION!')# TODO: Crash on this happening once everything else is working.
+            logging.debug('hash_md5={0!r}'.format(hash_md5))
+            logging.debug('image.file_md5={0!r}'.format(image.file_md5))
+            logging.debug('image.file_md5_hex={0!r}'.format(image.file_md5_hex))
+            print('BREAKPOINT in md5 check')
+        print('BREAKPOINT after md5 check')
 
         # Download thumbnail
+        thumbnail_url = image.thumbnail_url
         # Genreate thumbnail path
         filename_thumbnail = os.path.basename(thumbnail_url)# TODO: Less shitty handling of this. (Feels wrong to use filsystem code for a URL)
         thumbnail_filepath = generate_media_filepath(
@@ -219,20 +179,21 @@ def save_post_media(db_ses, req_ses, base_path, board_name, post):
             media_type='thumb',
             filename=filename_thumbnail
         )
-        # Load thumbnail from server
-        thumbnail_resp = common.fetch(
-            reuests_session=req_ses,
-            url = image.thumbnail_url,
-        )
-        if (not thumbnail_resp):
-            logging.error('No thumbnail response!')
-            raise WeFuckedUp()# TODO: Handle failure to retreive thumbnail
-        else:
-            # Save thumbnail file
-            common.write_file(
-                file_path=thumbnail_filepath,
-                data=image_resp.content
+        try:
+            # Load thumbnail from server
+            thumbnail_resp = common.fetch(
+                requests_session=req_ses,
+                url = thumbnail_url,
             )
+        except common.FetchGot404 as err:
+            logging.exception(err)
+            logging.warning('Could not fetch thumbnail remote file, skipping this image.')# TODO: Decide if missing thumbnail should or should not be enough to skip image add.
+            continue# Skip handling of this image download.
+        # Save thumbnail file
+        common.write_file(
+            file_path=thumbnail_filepath,
+            data=image_resp.content
+        )
         # Create DB record for image
         new_image_row = Image(
             # Identification of image characteristics
@@ -242,7 +203,7 @@ def save_post_media(db_ses, req_ses, base_path, board_name, post):
             hash_sha256 = hash_sha256, # SHA256 hash of full file.
             hash_sha512 = hash_sha512, # SHA512 hash of full file.
             # Files on disk
-            file_extention = file_extention, # File extention of the fullview file.
+            file_extension = file_extension, # File extention of the fullview file.
             filename_full = image_filename, # Fullsized media file's filename.
             filename_thumbnail = filename_thumbnail, # Thumbnail's filename. Does not care if OP or reply.
         )
@@ -272,12 +233,10 @@ def update_thread( db_ses, req_ses, thread, base_path, board_name,):
     If the thread is not already in the DB, add it."""
     logging.debug('update_thread() thread={0!r}'.format(thread))
     print('BREAKPOINT')
-    thread_num = thread.id
-    assert2( (type(thread_num) is int), value=thread_num)
 
     # Load DB row for thread. (or at least try to.)
     thread_find_query = session.query(Thread)\
-    .filter(Thread.thread_num == thread_num)
+    .filter(Thread.thread_num == thread.id)
     thread_row = thread_find_query.first()
 
     if (thread_row):
@@ -286,9 +245,16 @@ def update_thread( db_ses, req_ses, thread, base_path, board_name,):
         working_local_posts = list(thread_row.posts)
     else:
         # Thread is new and needs a row created.
-        logging.info('Creating row for new thread: {0!r}'.format(thread_num))
-        # TODO WRITEME!
-        thread_row = Thread()# Will this line work?
+        logging.info('Creating row for new thread: {0!r}'.format(thread.id))
+        thread_row = Thread(# Create a new thread row for this thread.
+            # Addressing
+            thread_num = thread.id,
+            # Thread data
+            posts = None, # JSON encoded posts for this thread
+            first_post_num = thread.id, # OP's post num
+            last_post_num = thread.last_reply_id, # Most recent reply's post num
+        )
+        db_ses.add(thread_row)# Stage new thread row into DB.
         working_local_posts = []
 
 
@@ -329,17 +295,33 @@ def update_thread( db_ses, req_ses, thread, base_path, board_name,):
 
         # Add post to thread DB column (only commit after all posts processed)
         # TODO WRITEME
-        assert(False)# TODO
-        working_local_posts.append(post._data)# HACK AND SHOULD BE CHANGED! TODO: IMPROVE THIS
+        working_local_posts.append(post._data)# Is there a better way of doing this?
+##    post_entry = {
+##        'post_id': post.post_id,
+##        'poster_id': post.poster_id,
+##        'name': post.name,
+##        'email': post.email,
+##        'tripcode': post.tripcode,
+##        'subject': post.subject,
+##        'comment': post.comment,
+##        'html_comment': post.html_comment,# This WILL recieve malicious input.
+##        'text_comment': post.text_comment,# This WILL recieve malicious input.
+##        'is_op': post.is_op,
+##        'timestamp': post.timestamp,
+##        'datetime': post.datetime,
+##        'first_file': post.first_file,# This will not work because there are subobjects
+##        'all_files': post.all_files,# This will not work because there are subobjects
+##        'extra_files': post.extra_files,# This will not work because there are subobjects
+##        'has_file': post.has_file,
+##        'has_extra_files': post.has_extra_files,
+##        'url': post.url,
+##    }
 
     # Change the DB row.
-    # TODO CODEME
     thread_row.posts = working_local_posts
-
-
     logging.debug('Committing new version of thread to DB')
     session.commit()
-    logging.debug('Finished updating thread {0!r}'.format(thread_num))
+    logging.debug('Finished updating thread {0!r}'.format(thread.id))
     return None# Be fucking explicit about what we're doing.
 
 
@@ -401,9 +383,8 @@ class Thread(Base):
 class Image(Base):
     """This table is for any and all images/media associated with posts for this board"""
     __tablename__ = 'v_images'# TODO FIXME: Make board-agnostic
-    pk = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)# Just a primary key. (I don't trust primary keys to work in the long-term. DBs need migrations, merges, ect sometimes.)
     # Addressing
-    image_id = sqlalchemy.Column(sqlalchemy.Integer, nullable=False, unique=True)# Primary key?
+    image_id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)# Just a primary key. (I don't trust primary keys to work in the long-term. DBs need migrations, merges, ect sometimes.)
     # Identification of image characteristics
     size_bytes = sqlalchemy.Column(sqlalchemy.Integer, nullable=True)# Size of the fullsized image in bytes #TODO!
     hash_md5 = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# MD5 hash of full file #TODO!
@@ -411,7 +392,7 @@ class Image(Base):
     hash_sha256 = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# SHA256 hash of full file #TODO!
     hash_sha512 = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# SHA512 hash of full file #TODO!
     # Files on disk
-    file_extention = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# File extention of the fullview file.
+    file_extension = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# File extention of the fullview file.
     filename_full = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Fullsized media file
     filename_thumb_reply = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Thumbnail used in OP post (if applicable)
     filename_thumb_op = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Thumbnail used in reply post (if applicable)
@@ -469,27 +450,7 @@ logging.info('DB connection established.')
 # ===== ===== ===== =====
 # Cache of local threads
 # Initialize state
-# DEFINE current_threads AS local memory copy of threads, 'current' state that gets updated by 'new' remote data
-current_threads = {}
-# Load initial cache of threads TODO!
-# JSON file holding a relatively recent version of the threads.
-json_threads_cache_filepath = config.json_threads_cache_filepath
-# Ensure dir containing threads cache file exists before trying to use it.
-threads_cache_dir = os.path.dirname(json_threads_cache_filepath)
-if threads_cache_dir:# Only try checking for a dir if one is specified.
-    if not os.path.exists(threads_cache_dir):
-        os.makedirs(threads_cache_dir)
-
-if not os.path.exists(json_threads_cache_filepath):
-    logging.debug('Crating threads cache file {0}'.format(json_threads_cache_filepath))
-    with open(json_threads_cache_filepath, 'wb') as new_cache_f:
-        json.dump({}, new_cache_f)# Initialise as empty
-# Load whatever is in the threads cache
-logging.debug('Loading threads cache file {0}'.format(json_threads_cache_filepath))
-with open(json_threads_cache_filepath, 'rb') as cache_f:
-    local_threads = json.load(cache_f)
-
-
+local_threads = {}
 
 # A thread
 example_cached_thread = {
@@ -537,6 +498,9 @@ loop_counter = 0
 while (True):
     loop_counter += 1
     logging.debug('Thread check loop iteration {0}'.format(loop_counter))
+    if loop_counter > 10:
+        logging.warning('DEBUG EXIT TRIGGERED. Ten cycles finished.')
+        raise DeliberateDevelopmentFuckup()# Throw a crowbar into the cogs so it doesn't run over pedestrians.
 
     # TODO: Logic to prevent overfilling of threads cache
 
@@ -587,6 +551,8 @@ while (True):
                 board_name=board_name,
             )
             logging.debug('Finished updating thread {0}'.format(thread.num))
+            logging.warning('DEBUG EXIT TRIGGERED. One thread processed.')
+            raise DeliberateDevelopmentFuckup()# Throw a crowbar into the cogs so it doesn't run over pedestrians.
 
     logging.debug('Finished updating threads')
     continue

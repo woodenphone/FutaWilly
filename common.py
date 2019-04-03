@@ -18,6 +18,7 @@ import logging
 import logging.handlers
 import datetime
 import re
+import hashlib
 # Remote libraries
 import requests
 import requests.exceptions
@@ -167,8 +168,6 @@ def read_file(file_path):
 
 # ===== ===== ===== =====
 # Hashing functions
-
-
 def hash_file_md5(filepath):
     """Generate MD5 hash for a file"""
     #https://www.pythoncentral.io/hashing-files-with-python/
@@ -180,7 +179,6 @@ def hash_file_md5(filepath):
             hasher.update(buf)
             buf = afile.read(BLOCKSIZE)
     file_md5 = hasher.hexdigest()
-    print(file_md5)
     return file_md5
 
 
@@ -195,7 +193,6 @@ def hash_file_sha1(filepath):
             hasher.update(buf)
             buf = afile.read(BLOCKSIZE)
     file_sha1 = hasher.hexdigest()
-    print(file_sha1)
     return file_sha1
 
 
@@ -210,7 +207,6 @@ def hash_file_sha256(filepath):
             hasher.update(buf)
             buf = afile.read(BLOCKSIZE)
     file_sha256 = hasher.hexdigest()
-    print(file_sha256)
     return file_sha256
 
 
@@ -225,7 +221,6 @@ def hash_file_sha512(filepath):
             hasher.update(buf)
             buf = afile.read(BLOCKSIZE)
     file_sha512 = hasher.hexdigest()
-    print(file_sha512)
     return file_sha512
 
 
