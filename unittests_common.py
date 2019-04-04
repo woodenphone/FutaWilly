@@ -27,7 +27,7 @@ class testmd5(unittest.testcase):# WIP TODO
         filepath = os.path.join('tests', 'hash_md5_a.test')
         self.assertEqual(hash_file_md5(filepath), 'some_hash_result')# TODO
 
-    def test_known_value_b(self)
+    def test_known_value_b(self):
         """Expected result with given file data"""
         filepath = os.path.join('tests', 'hash_md5_b.test')
         self.assertEqual(hash_file_md5(filepath), 'some_hash_result')# TODO

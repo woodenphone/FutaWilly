@@ -62,14 +62,25 @@ class AssertAFuckupHappened(FuckUp, AssertionError):
 
 
 
-class DeliberateDevelopmentFuckup(Fuckup):
+class DeliberateDevelopmentFuckup(WeFuckedUp):
     """
     A deliberate fuckup, introduced for development reasons.
     Intended to be implimented merely temporary.
-    If a user experiences this Fuckup then we have fucked up too hard.
+    If a user experiences this FuckUp then we have fucked up too hard.
+    This is like putting chocks under an aeroplane's wheels or a crowbar into a lathe's gearing.
     """
     pass# Nothing to do in an exception class like this other than hold a name.
 
+
+
+class UnimplimentedFuckUp(WeFuckedUp):
+    """
+    The calling code is not ready for use.
+    Hurry up and get it written.
+    We fucked up by not getting shit done on time.
+    Used to prevent WIP code from sneaking into use.
+    """
+    pass# Nothing to do in an exception class like this other than hold a name.
 
 
 

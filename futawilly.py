@@ -28,7 +28,7 @@ import requests
 # Local modules
 import common
 import config.futawilly_config as config
-from fuckups import *# Local assertions
+from fuckups import *# Local Exceptions
 
 
 
@@ -96,7 +96,7 @@ def save_media_file(req_ses, base_path, media_type, url, filename):
             file_path=filepath,
             data=media_resp.content
         )
-    assert(False)# This is not ready for use!
+    raise UnimplimentedFuckUp()# This is not ready for use!
     return None# Be fucking explicit about what we're doing.
 
 
@@ -216,16 +216,18 @@ def save_post_media(db_ses, req_ses, base_path, board_name, post):
     return None# Can we return a list of DB IDs for the media?
 
 
-def list_db_row_post_ids(posts):
+def list_db_row_post_ids(thread_row):# UNUSED, REMOVEME?
     """Takes posts field from Dd. Returns unsorted list of post numbers"""
-    post_nums = []
+    orig_posts = thread_row.posts
+    posts = list(orig_posts)
+    post_nums_set = set()# Sets are good for membership checking.
     for post in posts:
-        if post['post']:# TODO FIX THIS; TODO WRITEME
-            pass# TODO FIX THIS; TODO WRITEME
-        pass# TODO FIX THIS; TODO WRITEME
-    pass# TODO FIX THIS; TODO WRITEME
-    assert(False)# This is not ready for use!
-    return post_ids
+        post_num = post['id']
+        if (post_num not in post_nums_set):
+            post_nums_set.add(post_num)
+
+    post_nums_list = list(post_nums_set)# Convert to list for convenience.
+    return post_nums_list
 
 
 def update_thread( db_ses, req_ses, thread, base_path, board_name,):
@@ -257,7 +259,6 @@ def update_thread( db_ses, req_ses, thread, base_path, board_name,):
         db_ses.add(thread_row)# Stage new thread row into DB.
         working_local_posts = []
 
-
     logging.debug('working_local_posts={0!r}'.format(working_local_posts))
     # After this point the only interaction with the DB copy of the posts should be immediately before committing thread changes.
     # This is to permit committing image creation without committing changes to posts.
@@ -272,12 +273,11 @@ def update_thread( db_ses, req_ses, thread, base_path, board_name,):
     # (Turn DB store of thread into set of post nums)
     db_post_nums = set()# A set will handle uniquification/deduplication of nums for us.
     for db_post in working_local_posts:
-        db_post_nums.add(db_post.num)
+        db_post_nums.add(db_post.no)# I _DO NOT_ like having differing variable names for the same value. TODO: Fix this.
 
     # Get just posts that are new
     # Should give a new set composed of elements in remote_post nums that are not in db_post_nums without modifying either compared set.
     new_post_nums = remote_post_nums.difference(db_post_nums)# "Return a new set with elements in the set that are not in the others." - https://docs.python.org/3.7/library/stdtypes.html#set-types-set-frozenset
-
 
     # Process NEW posts
     for post in thread.posts:# Addressing posts by num?
@@ -296,66 +296,68 @@ def update_thread( db_ses, req_ses, thread, base_path, board_name,):
         # Add post to thread DB column (only commit after all posts processed)
         # TODO WRITEME
         working_local_posts.append(post._data)# Is there a better way of doing this?
-##    post_entry = {
-##        'post_id': post.post_id,
-##        'poster_id': post.poster_id,
-##        'name': post.name,
-##        'email': post.email,
-##        'tripcode': post.tripcode,
-##        'subject': post.subject,
-##        'comment': post.comment,
-##        'html_comment': post.html_comment,# This WILL recieve malicious input.
-##        'text_comment': post.text_comment,# This WILL recieve malicious input.
-##        'is_op': post.is_op,
-##        'timestamp': post.timestamp,
-##        'datetime': post.datetime,
-##        'first_file': post.first_file,# This will not work because there are subobjects
-##        'all_files': post.all_files,# This will not work because there are subobjects
-##        'extra_files': post.extra_files,# This will not work because there are subobjects
-##        'has_file': post.has_file,
-##        'has_extra_files': post.has_extra_files,
-##        'url': post.url,
-##    }
 
     # Change the DB row.
     thread_row.posts = working_local_posts
+    thread_row.first_post_num = thread.id, # OP's post num
+    thread_row.last_post_num = thread.last_reply_id, # Most recent reply's post num
     logging.debug('Committing new version of thread to DB')
     session.commit()
     logging.debug('Finished updating thread {0!r}'.format(thread.id))
     return None# Be fucking explicit about what we're doing.
 
 
+def mark_thread_dead(db_ses, thread_num):
+    logging.debug('Marking thread as dead: {0!r}'.format(thread_num))
+    # Load DB row for thread. (or at least try to.)
+    thread_find_query = session.query(Thread)\
+    .filter(Thread.thread_num == thread_num)
+    thread_row = thread_find_query.first()
+    if (thread_row):
+        # Update for the last time
+        thread_row.dead_timestamp = datetime.datetime.utcnow()# FUCKING TIMEZONES. TODO: Consitency check time values.
+        thread_row.dead = True
+        session.commit()
+        logging.debug('Successfully marked thread as dead: {0!r}'.format(thread_num))
+    else:
+        logging.error('Could not find thread to mark it as dead: {0!r}'.format(thread_num))
+    return
 
 
-
-# ===== ===== ===== =====
-# Perseistant data store
-# Postgres is desired. JSONB was requested as post storage datatype.
-# sqlite is stdlib though, so let's prototype with that.
-
-# Use a ORM so we don't have to learn SQL. We only want to use the DB as a big datastore that won't rape our HDD with millions of files.
-# SQLAlchemy
-
-# Table names
-#
-# v_threads
-# v_media
-#
-
-### Board-level threads table. One row per thread.
-### v_threads
-### primary_key, thread_num, op_num, last_reply_num, updated_timestamp, deleted_timestamp
-##
-##
-### Roard-level media table, map image_id to image_hash to filepath.
-### v_media
-### primary_key, size_bytes, image_id, md5b64, sha1b64, path_fullview, path_opthumb, path_replythumb,
-##def give_img_table(board_name, sqlalchemy_base_thing):
-##    class BoardMedia:
-##        pass
-##    return BoardMedia
+def find_db_alive_thread_nums(db_ses, max_results=5000):
+    db_alive_thread_nums = set()# Set allows easy difference checking
+    alive_find_query = session.query(Thread)\
+        .filter(Thread.thread_num == thread_num)\
+        [0:max_results]# LIMIT max_results
+    for alive_thread_row in alive_find_query:
+        db_alive_thread_nums.add(alive_thread_row.thread_num)
+    return db_alive_thread_nums
 
 
+def prune_deleted_threads(db_ses, alive_threads, max_results=5000):
+    logging.debug('Pruning dead threads')
+    # Grab not-dead threads from DB
+    db_alive_thread_nums = set()
+    alive_find_query = session.query(Thread)\
+        .filter(Thread.thread_num == thread_num)\
+        [0:max_results]# LIMIT max_results
+    for alive_thread_row in alive_find_query:
+        db_alive_thread_nums.add(alive_thread_row.thread_num)
+
+    # Grab alive threads from latest board update
+    board_alive_thread_nums = set()
+    for alive_thread in alive_threads:
+        board_alive_thread_nums.add(alive_thread.id)
+
+    # Get threads marked alive in DB but not on board
+    dead_thread_nums = db_alive_thread_nums.difference(board_alive_thread_nums)
+    logging.info('Found {0} dead threads'.format(len(dead_thread_nums)))
+
+    # Mark dead threads as dead
+    for dead_thread_num in dead_thread_nums:
+        mark_thread_dead(db_ses, dead_thread_num)
+    logging.debug('Finished pruning dead threads')
+    return
 
 
 # ===== ===== ===== =====
@@ -364,47 +366,70 @@ def update_thread( db_ses, req_ses, thread, base_path, board_name,):
 from sqlalchemy.ext.declarative import declarative_base
 Base = declarative_base()
 
-class Thread(Base):
-    """This table is for any and all posts for this board"""
-    __tablename__ = 'v_threads'# TODO FIXME: Make board-agnostic
-    pk = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)# Just a primary key.
-    # Addressing
-    thread_num = sqlalchemy.Column(sqlalchemy.Integer, nullable=False, unique=True)
-    # Thread data
-    posts = sqlalchemy.Column(sqlalchemy.JSON, nullable=True)# JSON encoded posts for this thread
-    first_post_num = sqlalchemy.Column(sqlalchemy.Integer, nullable=True)# OP's post num
-    last_post_num = sqlalchemy.Column(sqlalchemy.Integer, nullable=True)# Most recent reply's post num
-    # Administrative / legal compliance
-    removed = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Users can't access thread
-    banned = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Fetcher can't save thread
+def get_threads_table(base, board_name):
+    """Dynamically generate the table definition class to permit multiple target boards.
+    base should be instance of sqlalchemy.declarative_base()
+    returns a sqlalchemy table class.
+    """
+    table_name = '{0}_threads'.format(board_name)
+    class Thread(base):
+        """This table is for any and all posts for this board"""
+        __tablename__ = table_name
+        pk = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)# Just a primary key.
+        # Addressing
+        thread_num = sqlalchemy.Column(sqlalchemy.Integer, nullable=False, unique=True)
+        # Thread data
+        posts = sqlalchemy.Column(sqlalchemy.JSON, nullable=True)# JSON encoded posts for this thread
+        first_post_num = sqlalchemy.Column(sqlalchemy.Integer, nullable=True)# OP's post num
+        last_post_num = sqlalchemy.Column(sqlalchemy.Integer, nullable=True)# Most recent reply's post num
+        dead = sqlalchemy.column(sqlalchemy.Boolean, nullable=True, default=False)# Has this thread been removed from the originating board? (Set TRUE if FALSE but not in catalogue. Only check if alive if currently FALSE)
+        dead_timestamp = sqlalchemy.column(sqlalchemy.DateTime, nullable=True, default=None)# First time the thread was in the DB but not on the board.
+        first_seen = sqlalchemy.column(sqlalchemy.DateTime, nullable=True, default=None)#First time thread was seen on the board by FutaWilly.
+        #last_seen = sqlalchemy.column(sqlalchemy.DateTime, nullable=True, default=None)#Last time thread was seen on the board by FutaWilly. (Commented out because it feels like it'd be a resource hog.)TODO: Consider this value's merits.
+        # Administrative / legal compliance
+        removed = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Users can't access thread
+        banned = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Fetcher can't save thread
+    return Thread# The newly-defined class
 
 
+def get_images_table(base, board_name):
+    """Dynamically generate the table definition class to permit multiple target boards.
+    base should be instance of sqlalchemy.declarative_base()
+    returns a sqlalchemy table class.
+    """
+    table_name = '{0}_images'.format(board_name)
+    class Image(base):
+        """This table is for any and all images/media associated with posts for this board"""
+        __tablename__ = table_name
+        # Addressing
+        image_id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)# Just a primary key. (I don't trust primary keys to work in the long-term. DBs need migrations, merges, ect sometimes.)
+        # Identification of image characteristics
+        size_bytes = sqlalchemy.Column(sqlalchemy.Integer, nullable=True)# Size of the fullsized image in bytes #TODO!
+        hash_md5 = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# MD5 hash of full file #TODO!
+        hash_sha1 = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# SHA1 hash of full file #TODO!
+        hash_sha256 = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# SHA256 hash of full file #TODO!
+        hash_sha512 = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# SHA512 hash of full file #TODO!
+        # Files on disk
+        file_extension = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# File extention of the fullview file.
+        filename_full = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Fullsized media file
+        filename_thumb_reply = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Thumbnail used in OP post (if applicable)
+        filename_thumb_op = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Thumbnail used in reply post (if applicable)
+        filename_thumbnail = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Thumbnail's filename. Does not care if OP or reply.
+        # Administrative / legal compliance
+        removed = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Users can't access file. #TODO!
+        banned = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Fetcher can't save file #TODO!
+        hard_banned = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Ultra-paranoid ban. Purge from cache, overwrite disk location, recheck for existance on a cronjob, the works. Use VERY sparingly. #TODO!
+        refetch_needed = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Resave the file if it is ever seen again. (For broken media) #TODO!
+        # Hacks (Like running this shit on more than one machine per single instance. Weird use cases and such.)
+        # None yet.
+    return Image# The newly-defined class
 
-class Image(Base):
-    """This table is for any and all images/media associated with posts for this board"""
-    __tablename__ = 'v_images'# TODO FIXME: Make board-agnostic
-    # Addressing
-    image_id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)# Just a primary key. (I don't trust primary keys to work in the long-term. DBs need migrations, merges, ect sometimes.)
-    # Identification of image characteristics
-    size_bytes = sqlalchemy.Column(sqlalchemy.Integer, nullable=True)# Size of the fullsized image in bytes #TODO!
-    hash_md5 = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# MD5 hash of full file #TODO!
-    hash_sha1 = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# SHA1 hash of full file #TODO!
-    hash_sha256 = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# SHA256 hash of full file #TODO!
-    hash_sha512 = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# SHA512 hash of full file #TODO!
-    # Files on disk
-    file_extension = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# File extention of the fullview file.
-    filename_full = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Fullsized media file
-    filename_thumb_reply = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Thumbnail used in OP post (if applicable)
-    filename_thumb_op = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Thumbnail used in reply post (if applicable)
-    filename_thumbnail = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Thumbnail's filename. Does not care if OP or reply.
-    # Administrative / legal compliance
-    removed = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Users can't access file. #TODO!
-    banned = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Fetcher can't save file #TODO!
-    hard_banned = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Ultra-paranoid ban. Purge from cache, overwrite disk location, recheck for existance on a cronjob, the works. Use VERY sparingly. #TODO!
-    refetch_needed = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Resave the file if it is ever seen again. (For broken media) #TODO!
-    # Hacks (Like running this shit on more than one machine per single instance. Weird use cases and such.)
-    # None yet.
 
+# Build classes. (Table definitions)
+# This needs to be done once per board, each time we start the program.
+# TODO: Move this to be closer/more local to fetcher
+Thread = get_threads_table(base=Base, board_name='v')
+Image = get_images_table(base=Base, board_name='v')
 
 
 # ===== ===== ===== =====
@@ -452,6 +477,9 @@ logging.info('DB connection established.')
 # Initialize state
 local_threads = {}
 
+
+
+
 # A thread
 example_cached_thread = {
     'thread_num': 1234,
@@ -494,12 +522,13 @@ req_ses = requests.session()
 # Start looping over remote threads
 base_path = config.media_base_path
 board_name = config.board_name
+maximum_dead_threads = config.maximum_dead_threads
 loop_counter = 0
 while (True):
     loop_counter += 1
     logging.debug('Thread check loop iteration {0}'.format(loop_counter))
-    if loop_counter > 10:
-        logging.warning('DEBUG EXIT TRIGGERED. Ten cycles finished.')
+    if loop_counter > 2:
+        logging.warning('DEBUG EXIT TRIGGERED. 2 cycles finished.')
         raise DeliberateDevelopmentFuckup()# Throw a crowbar into the cogs so it doesn't run over pedestrians.
 
     # TODO: Logic to prevent overfilling of threads cache
@@ -507,10 +536,17 @@ while (True):
     # Update from remote server
     logging.debug('Starting to update threads')
     # Threads list
-    board = py8chan.Board(board_name=config.board_name)
+    board = py8chan.Board(board_name=board_name)
     threads = board.get_all_threads()
     logging.debug('threads={0!r}'.format(threads))
     print('BREAKPOINT')
+
+    # Notice dead threads and mark them as dead.
+    prune_deleted_threads(
+        db_ses=db_ses,
+        alive_threads=threads,
+        max_results=5000
+    )
 
     # Check each thread that was listed against what we have.
     # - If new.latest_post > local.latest_post: reprocess thread. Otherwise thread is unchanged.
@@ -551,12 +587,17 @@ while (True):
                 board_name=board_name,
             )
             logging.debug('Finished updating thread {0}'.format(thread.num))
-            logging.warning('DEBUG EXIT TRIGGERED. One thread processed.')
-            raise DeliberateDevelopmentFuckup()# Throw a crowbar into the cogs so it doesn't run over pedestrians.
+##            logging.warning('DEBUG EXIT TRIGGERED. One thread processed.')
+##            raise DeliberateDevelopmentFuckup()# Throw a crowbar into the cogs so it doesn't run over pedestrians.
 
     logging.debug('Finished updating threads')
     continue
 
+
+
+# ===== ===== ===== =====
+# Host the DB threads as a webapp
+# TODO
 
 
 # ===== ===== ===== =====
