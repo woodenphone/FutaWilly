@@ -104,6 +104,9 @@ def save_post_media(db_ses, req_ses, base_path, board_name, post):
     """Save media from a post, adding it to the DB.
     Expects py8chan type Post object.
     Commits changes."""
+    if (not config.media_enable_saving):
+        # If media saving disabled completely
+        return
     # Save any new media (from new posts).
     for image in post.all_files():# For each image, if any:
         # Lookup image hash in DB.
@@ -114,86 +117,105 @@ def save_post_media(db_ses, req_ses, base_path, board_name, post):
             # Nothing needed to be done, we already have the file so all that is needed is a DB association.
             # TODO: Process all images in a thread simultaneously for greater speed maybe?
             #return existing_image_row.image_id# For faster DB lookup on retreival this can be used as a foreign key. (Hashes should be 'canonical' association value though?)
+
+            # Check if image needs (re)downloading
+            # TODO CODEME
+
             return None# Be fucking explicit about what we're doing.
         # If image not in DB, download image then add it to DB.
-        # Download image
-        # Generate path to save image to
-        image_filename = image.filename
-        assert2( (type(image_filename) is str), value=image_filename)# Should be text. (Sanity check remote value)
-        assert2( (8 <= len(image_filename) <= 128), value=image_filename)# is image hash so about 64 chars. (Sanity check remote value)
-        board_path = os.path.join(base_path, board_name)
-        image_filepath = generate_media_filepath(
-            base_path=base_path,
-            media_type='image',# TODO: Validate that 'image' is what we're using for this value
-            filename=image.filename
-        )
-        file_extension = image.file_extension
-        assert2( (type(file_extension) is str), value=file_extension)# Should be text. (Sanity check remote value)
-        assert2( (0 <= len(file_extension) <= 16), value=file_extension)# Short text. (Sanity check remote value)
-        image_url = image.file_url
-        assert2( (type(image_url) is str), image_url)# Should be text. (Sanity check remote value)
-        assert2( (16 <= len(image_url) <= 256), image_url)# Short text. (Sanity check remote value)
-        # Load image from server
-        try:
-            logging.debug('save_post_media() image_url={0!r}; image_filepath={1!r};'.format(image_url, image_filepath))
-            image_resp = common.fetch(
-                requests_session=req_ses,
-                url = image_url,
+        if (config.media_download_enable_thumb):
+            # Download image:
+            # Generate path to save image to
+            image_filename = image.filename
+            assert2( (type(image_filename) is str), value=image_filename)# Should be text. (Sanity check remote value)
+            assert2( (8 <= len(image_filename) <= 128), value=image_filename)# is image hash so about 64 chars. (Sanity check remote value)
+            board_path = os.path.join(base_path, board_name)
+            image_filepath = generate_media_filepath(
+                base_path=base_path,
+                media_type='image',# TODO: Validate that 'image' is what we're using for this value
+                filename=image.filename
             )
-        except common.FetchGot404 as err:
-            logging.exception(err)
-            logging.warning('Could not fetch primary remote file, skipping this image.')
-            continue# Skip handling of this image download.
-        # Save image file
-        common.write_file(
-            file_path=image_filepath,
-            data=image_resp.content
-        )
-        # Calculate hashes. (We use more than one because hash collisions are a thing.)
-        with open(image_filepath, 'rb') as image_f:
-            # https://www.pythoncentral.io/hashing-files-with-python/
-            # Filesize in bytes
-            size_bytes = os.path.getsize(image_filepath)# https://stackoverflow.com/questions/2104080/how-to-check-file-size-in-python
-            hash_md5 = common.hash_file_md5(filepath=image_filepath)
-            hash_sha1 = common.hash_file_sha1(filepath=image_filepath)
-            hash_sha256 = common.hash_file_sha256(filepath=image_filepath)
-            hash_sha512 = common.hash_file_sha512(filepath=image_filepath)
-
-        print('BREAKPOINT before md5 check')
-        # Sanitycheck recieved file's MD5 against what the server told us. (Do we really need to do this? Does having this check make us less reliable?)
-        md5_algorithm_works = (hash_md5 == image.file_md5)
-        if (not md5_algorithm_works):
-            logging.warning('MD5 IMPLIMENTATION IN USE IS NOT CONSISTENT WITH EXPECTED DATA! DO NOT USE IN PRODUCTION!')# TODO: Crash on this happening once everything else is working.
-            logging.debug('hash_md5={0!r}'.format(hash_md5))
-            logging.debug('image.file_md5={0!r}'.format(image.file_md5))
-            logging.debug('image.file_md5_hex={0!r}'.format(image.file_md5_hex))
-            print('BREAKPOINT in md5 check')
-        print('BREAKPOINT after md5 check')
-
-        # Download thumbnail
-        thumbnail_url = image.thumbnail_url
-        # Genreate thumbnail path
-        filename_thumbnail = os.path.basename(thumbnail_url)# TODO: Less shitty handling of this. (Feels wrong to use filsystem code for a URL)
-        thumbnail_filepath = generate_media_filepath(
-            base_path=base_path,
-            media_type='thumb',
-            filename=filename_thumbnail
-        )
-        try:
-            # Load thumbnail from server
-            thumbnail_resp = common.fetch(
-                requests_session=req_ses,
-                url = thumbnail_url,
+            file_extension = image.file_extension
+            assert2( (type(file_extension) is str), value=file_extension)# Should be text. (Sanity check remote value)
+            assert2( (0 <= len(file_extension) <= 16), value=file_extension)# Short text. (Sanity check remote value)
+            image_url = image.file_url
+            assert2( (type(image_url) is str), image_url)# Should be text. (Sanity check remote value)
+            assert2( (16 <= len(image_url) <= 256), image_url)# Short text. (Sanity check remote value)
+            # Load image from server
+            try:
+                logging.debug('save_post_media() image_url={0!r}; image_filepath={1!r};'.format(image_url, image_filepath))
+                image_resp = common.fetch(
+                    requests_session=req_ses,
+                    url = image_url,
+                )
+            except common.FetchGot404 as err:
+                logging.exception(err)
+                logging.warning('Could not fetch primary remote file, skipping this image.')
+                continue# Skip handling of this image download.
+            # Save image file
+            common.write_file(
+                file_path=image_filepath,
+                data=image_resp.content
             )
-        except common.FetchGot404 as err:
-            logging.exception(err)
-            logging.warning('Could not fetch thumbnail remote file, skipping this image.')# TODO: Decide if missing thumbnail should or should not be enough to skip image add.
-            continue# Skip handling of this image download.
-        # Save thumbnail file
-        common.write_file(
-            file_path=thumbnail_filepath,
-            data=image_resp.content
-        )
+            # Calculate hashes. (We use more than one because hash collisions are a thing.)
+            with open(image_filepath, 'rb') as image_f:
+                # https://www.pythoncentral.io/hashing-files-with-python/
+                # Filesize in bytes
+                size_bytes = os.path.getsize(image_filepath)# https://stackoverflow.com/questions/2104080/how-to-check-file-size-in-python
+                hash_md5 = common.hash_file_md5(filepath=image_filepath)
+                hash_sha1 = common.hash_file_sha1(filepath=image_filepath)
+                hash_sha256 = common.hash_file_sha256(filepath=image_filepath)
+                hash_sha512 = common.hash_file_sha512(filepath=image_filepath)
+
+            print('BREAKPOINT before md5 check')
+            # Sanitycheck recieved file's MD5 against what the server told us. (Do we really need to do this? Does having this check make us less reliable?)
+            md5_algorithm_works = (hash_md5 == image.file_md5)
+            if (not md5_algorithm_works):
+                logging.warning('MD5 IMPLIMENTATION IN USE IS NOT CONSISTENT WITH EXPECTED DATA! DO NOT USE IN PRODUCTION!')# TODO: Crash on this happening once everything else is working.
+                logging.debug('hash_md5={0!r}'.format(hash_md5))
+                logging.debug('image.file_md5={0!r}'.format(image.file_md5))
+                logging.debug('image.file_md5_hex={0!r}'.format(image.file_md5_hex))
+                print('BREAKPOINT in md5 check')
+            print('BREAKPOINT after md5 check')
+        else:
+            # If image download disabled:
+            # NULL values for unfetched data
+            filename_full = None
+            size_bytes = None
+            hash_md5 = None
+            hash_sha1 = None
+            hash_sha256 = None
+            hash_sha512 = None
+
+        if (config.media_download_enable_thumb):
+            # Download thumbnail:
+            thumbnail_url = image.thumbnail_url
+            # Genreate thumbnail path
+            filename_thumbnail = os.path.basename(thumbnail_url)# TODO: Less shitty handling of this. (Feels wrong to use filsystem code for a URL)
+            thumbnail_filepath = generate_media_filepath(
+                base_path=base_path,
+                media_type='thumb',
+                filename=filename_thumbnail
+            )
+            try:
+                # Load thumbnail from server
+                thumbnail_resp = common.fetch(
+                    requests_session=req_ses,
+                    url = thumbnail_url,
+                )
+            except common.FetchGot404 as err:
+                logging.exception(err)
+                logging.warning('Could not fetch thumbnail remote file, skipping this image.')# TODO: Decide if missing thumbnail should or should not be enough to skip image add.
+                continue# Skip handling of this image download.
+            # Save thumbnail file
+            common.write_file(
+                file_path=thumbnail_filepath,
+                data=image_resp.content
+            )
+        else:
+            # If no thumbnail download:
+            # NULL values for unfetched data
+            filename_thumbnail = None
         # Create DB record for image
         new_image_row = Image(
             # Identification of image characteristics
@@ -255,8 +277,12 @@ def update_thread( db_ses, req_ses, thread, base_path, board_name,):
             posts = None, # JSON encoded posts for this thread
             first_post_num = thread.id, # OP's post num
             last_post_num = thread.last_reply_id, # Most recent reply's post num
+            first_seen = datetime.datetime.utcnow()# TODO Check date handling RE timezones
         )
         db_ses.add(thread_row)# Stage new thread row into DB.
+        working_local_posts = None
+
+    if working_local_posts is None:# Initialize as empty list if None / NULL
         working_local_posts = []
 
     logging.debug('working_local_posts={0!r}'.format(working_local_posts))
@@ -358,6 +384,18 @@ def prune_deleted_threads(db_ses, alive_threads, max_results=5000):
         mark_thread_dead(db_ses, dead_thread_num)
     logging.debug('Finished pruning dead threads')
     return
+
+
+
+# ===== ===== ===== =====
+# Warn about dumb settings
+if (not config.media_enable_saving):
+    logging.warning('Media saving disabled completely! config.media_enable_saving={0!r}'.format(media_enable_saving))
+if (not config.media_download_enable_full):
+    logging.warning('Media fullsize saving disabled! config.media_download_enable_full={0!r}'.format(media_download_enable_full))
+if (not config.media_download_enable_thumb):
+    logging.warning('Media thumbnail saving disabled! config.media_download_enable_thumb={0!r}'.format(media_download_enable_thumb))
+
 
 
 # ===== ===== ===== =====
@@ -526,9 +564,9 @@ maximum_dead_threads = config.maximum_dead_threads
 loop_counter = 0
 while (True):
     loop_counter += 1
-    logging.debug('Thread check loop iteration {0}'.format(loop_counter))
-    if loop_counter > 2:
-        logging.warning('DEBUG EXIT TRIGGERED. 2 cycles finished.')
+    logging.info('Thread check loop iteration {0}'.format(loop_counter))
+    if loop_counter > 200:
+        logging.warning('DEBUG EXIT TRIGGERED. Maximum cycles reached.')
         raise DeliberateDevelopmentFuckup()# Throw a crowbar into the cogs so it doesn't run over pedestrians.
 
     # TODO: Logic to prevent overfilling of threads cache
@@ -539,7 +577,7 @@ while (True):
     board = py8chan.Board(board_name=board_name)
     threads = board.get_all_threads()
     logging.debug('threads={0!r}'.format(threads))
-    print('BREAKPOINT')
+##    print('BREAKPOINT')
 
     # Notice dead threads and mark them as dead.
     prune_deleted_threads(
@@ -551,9 +589,9 @@ while (True):
     # Check each thread that was listed against what we have.
     # - If new.latest_post > local.latest_post: reprocess thread. Otherwise thread is unchanged.
     for thread in threads:
-        logging.debug('thread={0!r}'.format(thread))
+##        logging.debug('thread={0!r}'.format(thread))
         do_thread_update = False# Should this thread be updated this cycle?
-        print('BREAKPOINT')
+##        print('BREAKPOINT')
         # Is thread updated?
         # Compare last post number
         thread_number = thread.id
