@@ -273,7 +273,7 @@ def update_thread( db_ses, req_ses, thread, base_path, board_name,):
     # (Turn DB store of thread into set of post nums)
     db_post_nums = set()# A set will handle uniquification/deduplication of nums for us.
     for db_post in working_local_posts:
-        db_post_nums.add(db_post.no)# I _DO NOT_ like having differing variable names for the same value. TODO: Fix this.
+        db_post_nums.add(db_post['no'])# I _DO NOT_ like having differing variable names for the same value. TODO: Fix this.
 
     # Get just posts that are new
     # Should give a new set composed of elements in remote_post nums that are not in db_post_nums without modifying either compared set.
@@ -299,8 +299,8 @@ def update_thread( db_ses, req_ses, thread, base_path, board_name,):
 
     # Change the DB row.
     thread_row.posts = working_local_posts
-    thread_row.first_post_num = thread.id, # OP's post num
-    thread_row.last_post_num = thread.last_reply_id, # Most recent reply's post num
+    thread_row.first_post_num = thread.id# OP's post num
+    thread_row.last_post_num = thread.last_reply_id# Most recent reply's post num
     logging.debug('Committing new version of thread to DB')
     session.commit()
     logging.debug('Finished updating thread {0!r}'.format(thread.id))
@@ -339,7 +339,7 @@ def prune_deleted_threads(db_ses, alive_threads, max_results=5000):
     # Grab not-dead threads from DB
     db_alive_thread_nums = set()
     alive_find_query = session.query(Thread)\
-        .filter(Thread.thread_num == thread_num)\
+        .filter(Thread.dead == True)\
         [0:max_results]# LIMIT max_results
     for alive_thread_row in alive_find_query:
         db_alive_thread_nums.add(alive_thread_row.thread_num)
@@ -382,9 +382,9 @@ def get_threads_table(base, board_name):
         posts = sqlalchemy.Column(sqlalchemy.JSON, nullable=True)# JSON encoded posts for this thread
         first_post_num = sqlalchemy.Column(sqlalchemy.Integer, nullable=True)# OP's post num
         last_post_num = sqlalchemy.Column(sqlalchemy.Integer, nullable=True)# Most recent reply's post num
-        dead = sqlalchemy.column(sqlalchemy.Boolean, nullable=True, default=False)# Has this thread been removed from the originating board? (Set TRUE if FALSE but not in catalogue. Only check if alive if currently FALSE)
-        dead_timestamp = sqlalchemy.column(sqlalchemy.DateTime, nullable=True, default=None)# First time the thread was in the DB but not on the board.
-        first_seen = sqlalchemy.column(sqlalchemy.DateTime, nullable=True, default=None)#First time thread was seen on the board by FutaWilly.
+        dead = sqlalchemy.Column(sqlalchemy.Boolean, nullable=True, default=False)# Has this thread been removed from the originating board? (Set TRUE if FALSE but not in catalogue. Only check if alive if currently FALSE)
+        dead_timestamp = sqlalchemy.Column(sqlalchemy.DateTime, nullable=True, default=None)# First time the thread was in the DB but not on the board.
+        first_seen = sqlalchemy.Column(sqlalchemy.DateTime, nullable=True, default=None)#First time thread was seen on the board by FutaWilly.
         #last_seen = sqlalchemy.column(sqlalchemy.DateTime, nullable=True, default=None)#Last time thread was seen on the board by FutaWilly. (Commented out because it feels like it'd be a resource hog.)TODO: Consider this value's merits.
         # Administrative / legal compliance
         removed = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Users can't access thread
