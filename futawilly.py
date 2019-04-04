@@ -78,26 +78,19 @@ def generate_media_filepath(base_path, media_type, filename):
     return filepath
 
 
-def save_media_file(req_ses, base_path, media_type, url, filename):
-    """Save a file to the media dir."""
-    filepath = generate_media_filepath(base_path=base_path, media_type=media_type, filename=filename)
-    logging.debug('save_media_file() url={0!r}; filename={1!r};'.format(url, filename))
-    # Load image from server
-    media_resp = common.fetch(
-        requests_session=req_ses,
-        url = url,
-    )
-    if (not media_resp):
-        logging.error('No media response!')
-        raise WeFuckedUp()# TODO: Handle failure to retreive image
-    else:
-        # Save image file
-        common.write_file(
-            file_path=filepath,
-            data=media_resp.content
-        )
-    raise UnimplimentedFuckUp()# This is not ready for use!
-    return None# Be fucking explicit about what we're doing.
+def decide_if_media_redownload(base_path, board_name, image_row):
+    """Logic to decide if an image seen with a post needs to be resaved.
+    Used when a media row exists for the hash."""
+    # Check if image needs (re)downloading
+    if (image_row['banned'] == True):# Do not save banned images.
+        return False
+    if (image_row['hard_banned'] == True):# Do not save hardbanned images.
+        return False
+    if (image_row['refetch_needed'] == True):# Save images tagged for resaveing.
+        return True
+    if (image_row['filename_full'] == None):# Image was not saved to start with
+        return True
+    return False
 
 
 def save_post_media(db_ses, req_ses, base_path, board_name, post):
@@ -114,16 +107,16 @@ def save_post_media(db_ses, req_ses, base_path, board_name, post):
             .filter(Image.hash_md5 == image.file_md5_hex)
         existing_image_row = image_find_query.first()
         if existing_image_row:
-            # Nothing needed to be done, we already have the file so all that is needed is a DB association.
-            # TODO: Process all images in a thread simultaneously for greater speed maybe?
-            #return existing_image_row.image_id# For faster DB lookup on retreival this can be used as a foreign key. (Hashes should be 'canonical' association value though?)
-
             # Check if image needs (re)downloading
-            # TODO CODEME
-
-            return None# Be fucking explicit about what we're doing.
+            do_redownload = decide_if_media_redownload(
+                base_path=base_path,
+                board_name=board_name,
+                image_row=image_row
+            )
+            if (not do_redownload):
+                return None# Be fucking explicit about what we're doing.
         # If image not in DB, download image then add it to DB.
-        if (config.media_download_enable_thumb):
+        if (config.media_download_enable_full):# If disabled fullsized media files will not be downloaded.
             # Download image:
             # Generate path to save image to
             image_filename = image.filename
@@ -187,7 +180,7 @@ def save_post_media(db_ses, req_ses, base_path, board_name, post):
             hash_sha256 = None
             hash_sha512 = None
 
-        if (config.media_download_enable_thumb):
+        if (config.media_download_enable_thumb):# If disabled thumbnails will not be downloaded.
             # Download thumbnail:
             thumbnail_url = image.thumbnail_url
             # Genreate thumbnail path
@@ -455,9 +448,9 @@ def get_images_table(base, board_name):
         filename_thumbnail = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Thumbnail's filename. Does not care if OP or reply.
         # Administrative / legal compliance
         removed = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Users can't access file. #TODO!
-        banned = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Fetcher can't save file #TODO!
+        banned = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Fetcher can't save file
         hard_banned = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Ultra-paranoid ban. Purge from cache, overwrite disk location, recheck for existance on a cronjob, the works. Use VERY sparingly. #TODO!
-        refetch_needed = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Resave the file if it is ever seen again. (For broken media) #TODO!
+        refetch_needed = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Resave the file if it is ever seen again. (For broken media)
         # Hacks (Like running this shit on more than one machine per single instance. Weird use cases and such.)
         # None yet.
     return Image# The newly-defined class
@@ -578,14 +571,12 @@ while (True):
     threads = board.get_all_threads()
     logging.debug('threads={0!r}'.format(threads))
 ##    print('BREAKPOINT')
-
     # Notice dead threads and mark them as dead.
     prune_deleted_threads(
         db_ses=db_ses,
         alive_threads=threads,
         max_results=5000
     )
-
     # Check each thread that was listed against what we have.
     # - If new.latest_post > local.latest_post: reprocess thread. Otherwise thread is unchanged.
     for thread in threads:
@@ -615,8 +606,6 @@ while (True):
             # Updated threads need updating.
             # Store new version of thread.
             logging.debug('Updating thread {0}'.format(thread.num))
-            print('BREAKPOINT')
-            # TODO WRITEME
             update_thread(
                 db_ses=db_ses,
                 req_ses=req_ses,
