@@ -85,12 +85,20 @@ def add_timestamp_to_log_filename(log_file_path,timestamp_string):
 # ===== ===== ===== =====
 # Fetching remote resources
 
-class FetchGot404(Exception):
+class FetchException(Exception):
+    """Superclass to catch any exception used in fetch()"""
+    pass
+
+class FetchGot404(FetchException):
     def __init__(self, url, response):
         self.url = url
         self.response = response
     """Pass on that there was a 404."""
 
+
+class FetchTooManyRetries(FetchException):
+    """Signal that fetch failed due to exceeding permitted terry count"""
+    pass
 
 
 def fetch(requests_session, url, method='get', data=None, expect_status=200, headers=None, max_attempts=5):
@@ -138,7 +146,7 @@ def fetch(requests_session, url, method='get', data=None, expect_status=200, hea
 ##            time.sleep(random.uniform(0.5, 3.5))
             return response
 
-    raise Exception('Giving up!')
+    raise FetchTooManyRetries('Giving up!')
 
 
 # ===== ===== ===== =====
