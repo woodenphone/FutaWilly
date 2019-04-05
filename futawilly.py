@@ -20,6 +20,7 @@ import copy
 import hashlib
 import base64
 import binascii
+import time
 # Remote libraries
 #import flask
 import sqlalchemy
@@ -227,7 +228,7 @@ def save_post_media(db_ses, req_ses, media_base_path, board_name, post):
         # Commit new image entry.
         db_ses.commit()
         logging.info('Added image to DB: {0!r}'.format(new_image_row))
-        time.sleep(config.media_download_interval)# Ratelimiting
+        time.sleep(config.media_download_delay)# Ratelimiting
         continue# Done saving this image.
     return None# Can we return a list of DB IDs for the media?
 
@@ -250,17 +251,17 @@ def update_thread( db_ses, req_ses, thread, media_base_path, board_name,):
     """Insert new post information to a thread's entry in the DB.
     If the thread is not already in the DB, add it."""
     logging.debug('update_thread() thread={0!r}'.format(thread))
-    print('BREAKPOINT')
-
     # Load DB row for thread. (or at least try to.)
     thread_find_query = session.query(Thread)\
     .filter(Thread.thread_num == thread.id)
     thread_row = thread_find_query.first()
-
     if (thread_row):
         # Grab the existing thread data
         logging.debug('thread_row.posts={0!r}'.format(thread_row.posts))
-        working_local_posts = list(thread_row.posts)# <-- IMPORTANT!
+        if (thread_row.posts is None):
+            working_local_posts = []# Initialize as empty list if None / NULL
+        else:
+            working_local_posts = list(thread_row.posts)# <-- IMPORTANT! This must copy the DB data into a new object.
     else:
         # Thread is new and needs a row created.
         logging.info('Creating row for new thread: {0!r}'.format(thread.id))
@@ -274,11 +275,7 @@ def update_thread( db_ses, req_ses, thread, media_base_path, board_name,):
             first_seen = datetime.datetime.utcnow()# TODO Check date handling RE timezones
         )
         db_ses.add(thread_row)# Stage new thread row into DB.
-        working_local_posts = None
-
-    if working_local_posts is None:# Initialize as empty list if None / NULL
-        working_local_posts = []
-
+        working_local_posts = []# Initialize as empty list if None / NULL
     logging.debug('working_local_posts={0!r}'.format(working_local_posts))
     # After this point the only interaction with the DB copy of the posts should be immediately before committing thread changes.
     # This is to permit committing image creation without committing changes to posts. <-- IMPORTANT!
@@ -293,11 +290,9 @@ def update_thread( db_ses, req_ses, thread, media_base_path, board_name,):
     db_post_nums = set()# A set will handle uniquification/deduplication of nums for us.
     for db_post in working_local_posts:
         db_post_nums.add(db_post['no'])# I _DO NOT_ like having differing variable names for the same value. TODO: Fix this.
-
     # Get just posts that are new
     # Should give a new set composed of elements in remote_post nums that are not in db_post_nums without modifying either compared set.
     new_post_nums = remote_post_nums.difference(db_post_nums)# "Return a new set with elements in the set that are not in the others." - https://docs.python.org/3.7/library/stdtypes.html#set-types-set-frozenset
-
     # Process NEW posts
     for post in thread.posts:# Addressing posts by num?
         post_num = post.num
@@ -314,7 +309,6 @@ def update_thread( db_ses, req_ses, thread, media_base_path, board_name,):
         # Add post to thread DB column (only commit after all posts processed)
         # TODO WRITEME
         working_local_posts.append(post._data)# Is there a better way of doing this?
-
     # Change the DB row.
     thread_row.posts = working_local_posts
     thread_row.first_post_num = thread.id# OP's post num
@@ -402,7 +396,7 @@ def board_update_loop(db_ses, req_ses, media_base_path, board_name, maximum_dead
         for thread in threads:
             do_thread_update = False# Should this thread be updated this cycle?
             # Is thread updated?
-            thread_number = thread.id
+            thread_number = thread.id# Assigning local var because buggy p8chan interface only works for some Thread class subvariable names
             try:
                 dummy = local_threads_update_cache[thread_number]# Ensure thread is in cache
             except KeyError:
@@ -411,15 +405,15 @@ def board_update_loop(db_ses, req_ses, media_base_path, board_name, maximum_dead
                 local_threads_update_cache[thread_number] = {'last_post_id':0}# Zero because it'll always be less than any post_num.
                 # Update thread
                 do_thread_update = True
-            if (len(thread.replies) != 0):# Only check last post numbers if there is at least one reply
-                # Compare the last post of each version of the thread against each other
-                if (thread.replies[-1].post_id != local_threads_update_cache[thread_number]['last_post_id']):
-                    logging.debug('New post detected in thread')
-                    do_thread_update = True
+
+            # Compare the last post of each version of the thread against each other
+            if (thread.all_posts[-1].post_id != local_threads_update_cache[thread_number]['last_post_id']):
+                logging.debug('New post detected in thread {0!r}'.format(thread_number))
+                do_thread_update = True
+
             if do_thread_update:
                 # Updated threads need updating.
-                # Store new version of thread.
-                logging.debug('Updating thread {0}'.format(thread.num))
+                logging.debug('Updating thread {0}'.format(thread_number))
                 update_thread(
                     db_ses=db_ses,
                     req_ses=req_ses,
@@ -428,12 +422,10 @@ def board_update_loop(db_ses, req_ses, media_base_path, board_name, maximum_dead
                     board_name=board_name,
                 )
                 # Update local updatecheck cache
-                local_threads_update_cache[thread_number] = {
-                    'last_post_id': thread.replies[-1].post_id
-                }
-                logging.debug('Finished updating thread {0}'.format(thread.num))
+                local_threads_update_cache[thread_number] = {'last_post_id': thread.all_posts[-1].post_id}
+                logging.debug('Finished updating thread {0}'.format(thread_number))
         logging.debug('Finished updating threads')
-        time.sleep(config.minimum_board_reload_interval)# Ratelimiting
+        time.sleep(config.board_reload_delay)# Ratelimiting
         continue
     logging.info('Board update loop is somehow returning!')# This line should not ever execute.
 
@@ -480,6 +472,7 @@ def get_threads_table(base, board_name):
         removed = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Users can't access thread
         banned = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Fetcher can't save thread
     return Thread# The newly-defined class
+
 
 
 def get_images_table(base, board_name):
@@ -529,6 +522,8 @@ logging.info('Starting DB connection...')
 # DB Configuration
 db_filepath = config.db_filepath
 db_connection_string = config.db_connection_string
+logging.debug('db_filepath = {0!r}'.format(db_filepath))
+logging.debug('db_connection_string = {0!r}'.format(db_connection_string))# DANGEROUS TO LOG CREDENTIALS!
 
 # SQLite3
 # Ensure DB path is available

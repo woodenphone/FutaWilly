@@ -131,11 +131,11 @@ def fetch(requests_session, url, method='get', data=None, expect_status=200, hea
         if response.status_code != expect_status:
             logging.error('Problem detected. Status code mismatch. Sleeping. expect_status: %s, response.status_code: %s' % (expect_status, response.status_code))
             write_file(file_path=os.path.join('debug', 'fetch_last_misc_bad_status_code.htm'), data=response.content)# Save page for debugging
-            time.sleep(60*try_num)
+            time.sleep(10*try_num)
             continue
         else:
             write_file(file_path=os.path.join('debug', 'fetch_last_success.htm'), data=response.content)# Save page for debugging
-            time.sleep(random.uniform(0.5, 3.5))
+##            time.sleep(random.uniform(0.5, 3.5))
             return response
 
     raise Exception('Giving up!')

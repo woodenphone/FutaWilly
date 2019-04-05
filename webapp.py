@@ -8,18 +8,38 @@
 import os
 import logging
 # Remote libraries
-import flask
+from flask import Flask, url_for
+from flask import request
 # Local modules
 import common
 import config.webapp_config as config
 
 
 
+app = Flask(__name__)
+
+
+@app.route('/')
+def hello_world():
+    """Test that we can access pages to start with"""
+    return 'Hello, World.'
+
+
+
+@app.route('/view_thread/<board_name>/<thread_num>')
+def view_thread(board_name, thread_num):
+    """Display one thread."""
+    resp_data = ''
+    posts = None# TODO: Load posts from DB
+    for post in posts:
+        resp_data += ''.format()
+    return 'TODO'
+
 
 
 
 def main():
-    pass
+    app.run()
 
 
 if __name__ == '__main__':
