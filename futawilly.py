@@ -112,7 +112,7 @@ def save_post_media(db_ses, req_ses, media_base_path, board_name, post):
             do_redownload = decide_if_media_redownload(
                 media_base_path=media_base_path,
                 board_name=board_name,
-                image_row=image_row
+                image_row=existing_image_row
             )
             if (not do_redownload):
                 return None# Be fucking explicit about what we're doing.
@@ -227,7 +227,7 @@ def save_post_media(db_ses, req_ses, media_base_path, board_name, post):
         db_ses.add(new_image_row)
         # Commit new image entry.
         db_ses.commit()
-        logging.info('Added image to DB: {0!r}'.format(new_image_row))
+        logging.info('Added image to DB: {0!r}'.format(image_filepath))
         time.sleep(config.media_download_delay)# Ratelimiting
         continue# Done saving this image.
     return None# Can we return a list of DB IDs for the media?
@@ -355,16 +355,13 @@ def prune_deleted_threads(db_ses, alive_threads, max_results=5000):
         [0:max_results]# LIMIT max_results
     for alive_thread_row in alive_find_query:
         db_alive_thread_nums.add(alive_thread_row.thread_num)
-
     # Grab alive threads from latest board update
     board_alive_thread_nums = set()
     for alive_thread in alive_threads:
         board_alive_thread_nums.add(alive_thread.id)
-
     # Get threads marked alive in DB but not on board
     dead_thread_nums = db_alive_thread_nums.difference(board_alive_thread_nums)
     logging.info('Found {0} dead threads'.format(len(dead_thread_nums)))
-
     # Mark dead threads as dead
     for dead_thread_num in dead_thread_nums:
         mark_thread_dead(db_ses, dead_thread_num)
