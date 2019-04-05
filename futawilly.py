@@ -71,14 +71,14 @@ def assert2(exp, msg=None, value=None):# THIS IS A DISTRACTION! LEAVE IT BE!
         raise AssertionError()
 
 
-def generate_media_filepath(base_path, media_type, filename):
+def generate_media_filepath(media_base_path, media_type, filename):
     a = filename[0:1]
     b = filename[1:4]
-    filepath = os.path.join(base_path, media_type, a, b, filename)
+    filepath = os.path.join(media_base_path, media_type, a, b, filename)
     return filepath
 
 
-def decide_if_media_redownload(base_path, board_name, image_row):
+def decide_if_media_redownload(media_base_path, board_name, image_row):
     """Logic to decide if an image seen with a post needs to be resaved.
     Used when a media row exists for the hash."""
     # Check if image needs (re)downloading
@@ -93,7 +93,7 @@ def decide_if_media_redownload(base_path, board_name, image_row):
     return False
 
 
-def save_post_media(db_ses, req_ses, base_path, board_name, post):
+def save_post_media(db_ses, req_ses, media_base_path, board_name, post):
     """Save media from a post, adding it to the DB.
     Expects py8chan type Post object.
     Commits changes."""
@@ -109,7 +109,7 @@ def save_post_media(db_ses, req_ses, base_path, board_name, post):
         if existing_image_row:
             # Check if image needs (re)downloading
             do_redownload = decide_if_media_redownload(
-                base_path=base_path,
+                media_base_path=media_base_path,
                 board_name=board_name,
                 image_row=image_row
             )
@@ -122,9 +122,9 @@ def save_post_media(db_ses, req_ses, base_path, board_name, post):
             image_filename = image.filename
             assert2( (type(image_filename) is str), value=image_filename)# Should be text. (Sanity check remote value)
             assert2( (8 <= len(image_filename) <= 128), value=image_filename)# is image hash so about 64 chars. (Sanity check remote value)
-            board_path = os.path.join(base_path, board_name)
+            board_path = os.path.join(media_base_path, board_name)
             image_filepath = generate_media_filepath(
-                base_path=base_path,
+                media_base_path=media_base_path,
                 media_type='image',# TODO: Validate that 'image' is what we're using for this value
                 filename=image.filename
             )
@@ -186,7 +186,7 @@ def save_post_media(db_ses, req_ses, base_path, board_name, post):
             # Genreate thumbnail path
             filename_thumbnail = os.path.basename(thumbnail_url)# TODO: Less shitty handling of this. (Feels wrong to use filsystem code for a URL)
             thumbnail_filepath = generate_media_filepath(
-                base_path=base_path,
+                media_base_path=media_base_path,
                 media_type='thumb',
                 filename=filename_thumbnail
             )
@@ -227,6 +227,7 @@ def save_post_media(db_ses, req_ses, base_path, board_name, post):
         # Commit new image entry.
         db_ses.commit()
         logging.info('Added image to DB: {0!r}'.format(new_image_row))
+        time.sleep(config.media_download_interval)# Ratelimiting
         continue# Done saving this image.
     return None# Can we return a list of DB IDs for the media?
 
@@ -245,7 +246,7 @@ def list_db_row_post_ids(thread_row):# UNUSED, REMOVEME?
     return post_nums_list
 
 
-def update_thread( db_ses, req_ses, thread, base_path, board_name,):
+def update_thread( db_ses, req_ses, thread, media_base_path, board_name,):
     """Insert new post information to a thread's entry in the DB.
     If the thread is not already in the DB, add it."""
     logging.debug('update_thread() thread={0!r}'.format(thread))
@@ -259,7 +260,7 @@ def update_thread( db_ses, req_ses, thread, base_path, board_name,):
     if (thread_row):
         # Grab the existing thread data
         logging.debug('thread_row.posts={0!r}'.format(thread_row.posts))
-        working_local_posts = list(thread_row.posts)
+        working_local_posts = list(thread_row.posts)# <-- IMPORTANT!
     else:
         # Thread is new and needs a row created.
         logging.info('Creating row for new thread: {0!r}'.format(thread.id))
@@ -280,14 +281,13 @@ def update_thread( db_ses, req_ses, thread, base_path, board_name,):
 
     logging.debug('working_local_posts={0!r}'.format(working_local_posts))
     # After this point the only interaction with the DB copy of the posts should be immediately before committing thread changes.
-    # This is to permit committing image creation without committing changes to posts.
+    # This is to permit committing image creation without committing changes to posts. <-- IMPORTANT!
 
     # Isolate new posts
     # (Turn thread object into set of post nums)
     remote_post_nums = set()# A set will handle uniquification/deduplication of nums for us.
     for remote_post in thread.posts:
         remote_post_nums.add(remote_post.num)
-
     # Get post nums from DB version of thread
     # (Turn DB store of thread into set of post nums)
     db_post_nums = set()# A set will handle uniquification/deduplication of nums for us.
@@ -307,11 +307,10 @@ def update_thread( db_ses, req_ses, thread, base_path, board_name,):
         save_post_media(
             db_ses=db_ses,
             req_ses=req_ses,
-            base_path=base_path,
+            media_base_path=media_base_path,
             board_name=board_name,
             post=post
         )
-
         # Add post to thread DB column (only commit after all posts processed)
         # TODO WRITEME
         working_local_posts.append(post._data)# Is there a better way of doing this?
@@ -377,6 +376,66 @@ def prune_deleted_threads(db_ses, alive_threads, max_results=5000):
         mark_thread_dead(db_ses, dead_thread_num)
     logging.debug('Finished pruning dead threads')
     return
+
+def board_update_loop(db_ses, req_ses, media_base_path, board_name, maximum_dead_threads):
+    """Main update loop for one board."""
+    loop_counter = 0
+    while (True):
+        loop_counter += 1
+        logging.info('Thread check loop iteration {0}'.format(loop_counter))
+        if loop_counter > 200:
+            logging.warning('DEBUG EXIT TRIGGERED. Maximum cycles reached.')
+            raise DeliberateDevelopmentFuckup()# Throw a crowbar into the cogs so it doesn't run over pedestrians.
+        # TODO: Logic to prevent overfilling of threads cache
+        logging.debug('Starting to update threads')
+        # Update from remote server
+        board = py8chan.Board(board_name=board_name)
+        threads = board.get_all_threads()# Threads list
+        # Notice dead threads and mark them as dead.
+        prune_deleted_threads(
+            db_ses=db_ses,
+            alive_threads=threads,
+            max_results=maximum_dead_threads
+        )
+        # Check each thread that was listed against what we have.
+        # - If new.latest_post > local.latest_post: reprocess thread. Otherwise thread is unchanged.
+        for thread in threads:
+            do_thread_update = False# Should this thread be updated this cycle?
+            # Is thread updated?
+            thread_number = thread.id
+            try:
+                dummy = local_threads_update_cache[thread_number]# Ensure thread is in cache
+            except KeyError:
+                # Thread is new
+                # Initialize local version
+                local_threads_update_cache[thread_number] = {'last_post_id':0}# Zero because it'll always be less than any post_num.
+                # Update thread
+                do_thread_update = True
+            if (len(thread.replies) != 0):# Only check last post numbers if there is at least one reply
+                # Compare the last post of each version of the thread against each other
+                if (thread.replies[-1].post_id != local_threads_update_cache[thread_number]['last_post_id']):
+                    logging.debug('New post detected in thread')
+                    do_thread_update = True
+            if do_thread_update:
+                # Updated threads need updating.
+                # Store new version of thread.
+                logging.debug('Updating thread {0}'.format(thread.num))
+                update_thread(
+                    db_ses=db_ses,
+                    req_ses=req_ses,
+                    thread=thread,
+                    media_base_path=media_base_path,
+                    board_name=board_name,
+                )
+                # Update local updatecheck cache
+                local_threads_update_cache[thread_number] = {
+                    'last_post_id': thread.replies[-1].post_id
+                }
+                logging.debug('Finished updating thread {0}'.format(thread.num))
+        logging.debug('Finished updating threads')
+        time.sleep(config.minimum_board_reload_interval)# Ratelimiting
+        continue
+    logging.info('Board update loop is somehow returning!')# This line should not ever execute.
 
 
 
@@ -449,7 +508,7 @@ def get_images_table(base, board_name):
         # Administrative / legal compliance
         removed = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Users can't access file. #TODO!
         banned = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Fetcher can't save file
-        hard_banned = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Ultra-paranoid ban. Purge from cache, overwrite disk location, recheck for existance on a cronjob, the works. Use VERY sparingly. #TODO!
+        hard_banned = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Ultra-paranoid ban. Purge from cache, overwrite disk location, recheck for existance on a cronjob, the works. All that remains should be admin logs and hashes used to prevent image ever existing again. Use VERY sparingly. #TODO!
         refetch_needed = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=0)# Resave the file if it is ever seen again. (For broken media)
         # Hacks (Like running this shit on more than one machine per single instance. Weird use cases and such.)
         # None yet.
@@ -466,24 +525,25 @@ Image = get_images_table(base=Base, board_name='v')
 # ===== ===== ===== =====
 # Spinup DB
 logging.info('Starting DB connection...')
-# SQLite3
-# DB Configuration
-db_filepath = os.path.join('tmp', 'futawilly.db')# For sqllite
-db_connection_string = 'sqlite:///tmp/futawilly.db'
 
+# DB Configuration
+db_filepath = config.db_filepath
+db_connection_string = config.db_connection_string
+
+# SQLite3
 # Ensure DB path is available
-db_dir = os.path.dirname(db_filepath)
-logging.debug('db_dir = {0!r}'.format(db_dir))
-if db_dir:# Only try to create dir if a dir is given
-    if not os.path.exists(db_dir):
-        logging.info('Creating DB dir: {0}'.format(db_dir))
-        os.makedirs(db_dir)
+if (db_filepath):# Don't bother if no filepath given.
+    db_dir = os.path.dirname(db_filepath)
+    logging.debug('db_dir = {0!r}'.format(db_dir))
+    if db_dir:# Only try to create dir if a dir is given.
+        if not os.path.exists(db_dir):
+            logging.info('Creating DB dir: {0}'.format(db_dir))
+            os.makedirs(db_dir)
 
 ### PostgreSQL
 ### DB Configuration
 ##db_connection_string = ''
 # TODO WRITEME
-
 
 # Start the DB engine
 logging.debug('Starting DB engine.')
@@ -493,134 +553,32 @@ engine = sqlalchemy.create_engine(
 )
 Base.metadata.create_all(engine, checkfirst=True)# Create tables based on classes. (checkfirst only creates if it doesn't exist already)
 
-
 # Create a session to interact with the DB
 logging.debug('Creating DB session.')
 Session = sqlalchemy.orm.sessionmaker(bind=engine)
 session = Session()
 db_ses = session# TEMPORARY! TODO: Move shit into functions so we can remove this
-
 logging.info('DB connection established.')
-
-
-# ===== ===== ===== =====
-# Cache of local threads
-# Initialize state
-local_threads = {}
-
-
-
-
-# A thread
-example_cached_thread = {
-    'thread_num': 1234,
-    'posts': [
-        # A post
-        {
-            'post_num': 1234,# Site-given post number
-            'comment': 'Test OP',# Site-given comment
-            'timestamp': 12345678,# Site-given timestamp
-            'media': [# Images for this post
-                    # An image
-                    {
-                    'position': 0,# Position in post display.
-                    'image_id': 1,# DB lookup value.
-                    'filename_long': u'example.jpg',# What the image is called in this post, including the extention.
-                    'filename_short': u'example',# What the image is called in this post, excluding the extention.
-                    'file_ext': u'jpg',# The file extention of the image.
-                    'hash_md5': 'abcdef0123456...'# MD5 hash of this image, in case DB is fucked up.
-                },
-            ],
-        }
-    ],
-    'fell_off_board': False, # Has the thread been removed by falling off the board?
-    'was_deleted_early': False, # Has the thread been deleted without appearing in the archive JSONs?
-    'active': True, # Is the thread still on the board?
-    'deletion_timestamp': datetime.datetime(1970, 1, 1), # locally-generated? timestamp of when thread was no longer on the board
-    'last_checked': datetime.datetime(1970, 1, 1),# Locally-generated date last loaded the thread.
-    'last_updated': datetime.datetime(1970, 1, 1),# Locally-generated date last time a modification was made to this thread in the DB.
-    'board': 'v',
-}
 
 
 # ===== ===== ===== =====
 # Setup requests session
 req_ses = requests.session()
 
-
+# ===== ===== ===== =====
+# Cache of local threads
+# Initialize state
+local_threads_update_cache = {}# THREAD_NUM: LAST_POST_NUM
 
 # ===== ===== ===== =====
 # Start looping over remote threads
-base_path = config.media_base_path
-board_name = config.board_name
-maximum_dead_threads = config.maximum_dead_threads
-loop_counter = 0
-while (True):
-    loop_counter += 1
-    logging.info('Thread check loop iteration {0}'.format(loop_counter))
-    if loop_counter > 200:
-        logging.warning('DEBUG EXIT TRIGGERED. Maximum cycles reached.')
-        raise DeliberateDevelopmentFuckup()# Throw a crowbar into the cogs so it doesn't run over pedestrians.
-
-    # TODO: Logic to prevent overfilling of threads cache
-
-    # Update from remote server
-    logging.debug('Starting to update threads')
-    # Threads list
-    board = py8chan.Board(board_name=board_name)
-    threads = board.get_all_threads()
-    logging.debug('threads={0!r}'.format(threads))
-##    print('BREAKPOINT')
-    # Notice dead threads and mark them as dead.
-    prune_deleted_threads(
-        db_ses=db_ses,
-        alive_threads=threads,
-        max_results=5000
-    )
-    # Check each thread that was listed against what we have.
-    # - If new.latest_post > local.latest_post: reprocess thread. Otherwise thread is unchanged.
-    for thread in threads:
-##        logging.debug('thread={0!r}'.format(thread))
-        do_thread_update = False# Should this thread be updated this cycle?
-##        print('BREAKPOINT')
-        # Is thread updated?
-        # Compare last post number
-        thread_number = thread.id
-        try:
-            current_thread = local_threads[thread_number]
-        except KeyError:
-            # Thread is new
-            # Initialize local version
-            local_threads[thread_number] = {}
-            # Update thread
-            do_thread_update = True
-
-        # Compare the last post of each version of the thread against each other
-        if (len(thread.replies) != 0):
-            # Only check last post numbers if there is at least one reply
-            if (thread.replies[-1].post_id != current_thread.replies[-1].post_id):
-                logging.debug('New post detected in thread')
-                do_thread_update = True
-
-        if do_thread_update:
-            # Updated threads need updating.
-            # Store new version of thread.
-            logging.debug('Updating thread {0}'.format(thread.num))
-            update_thread(
-                db_ses=db_ses,
-                req_ses=req_ses,
-                thread=thread,
-                base_path=base_path,
-                board_name=board_name,
-            )
-            logging.debug('Finished updating thread {0}'.format(thread.num))
-##            logging.warning('DEBUG EXIT TRIGGERED. One thread processed.')
-##            raise DeliberateDevelopmentFuckup()# Throw a crowbar into the cogs so it doesn't run over pedestrians.
-
-    logging.debug('Finished updating threads')
-    continue
-
-
+board_update_loop(
+    db_ses=db_ses,
+    req_ses=req_ses,
+    media_base_path=config.media_base_path,
+    board_name=config.board_name,
+    maximum_dead_threads=config.maximum_dead_threads,
+)
 
 # ===== ===== ===== =====
 # Host the DB threads as a webapp
