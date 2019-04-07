@@ -176,6 +176,14 @@ def read_file(file_path):
 
 # ===== ===== ===== =====
 # Hashing functions
+
+def hash_memory_md5(data):
+    m = hashlib.md5()
+    m.update(data)
+    hash_md5 = m.digest()
+    return hash_md5
+
+
 def hash_file_md5(filepath):
     """Generate MD5 hash for a file"""
     #https://www.pythoncentral.io/hashing-files-with-python/
