@@ -241,6 +241,37 @@ def hash_file_sha512(filepath):
 
 
 # ===== ===== ===== =====
+# File removal for legal compliance
+##def secure_delete(filepath, passes=2):
+##    # https://stackoverflow.com/questions/17455300/python-securely-remove-file
+##    with open(filepath, "ba+") as delfile:
+##        length = delfile.tell()
+##        for i in range(passes):
+##            delfile.seek(0)
+##            delfile.write(os.urandom(length))
+##    os.remove(filepath)
+##    return
+
+
+def secure_delete(path, passes=3):
+    # # https://stackoverflow.com/questions/17455300/python-securely-remove-file
+    with open(path, "ba+", buffering=0) as delfile:
+        length = delfile.tell()
+    delfile.close()
+    with open(path, "br+", buffering=0) as delfile:
+        #print("Length of file:%s" % length)
+        for i in range(passes):
+            delfile.seek(0,0)
+            delfile.write(os.urandom(length))
+            #wait = input("Pass %s Complete" % i)
+        #wait = input("All %s Passes Complete" % passes)
+        delfile.seek(0)
+        for x in range(length):
+            delfile.write(b'\x00')
+        #wait = input("Final Zero Pass Complete")
+    os.remove(path) #So note here that the TRUE shred actually renames to file to all zeros with the length of the filename considered to thwart metadata filename collection, here I didn't really care to implement
+
+# ===== ===== ===== =====
 #
 
 
