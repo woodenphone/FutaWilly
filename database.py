@@ -99,20 +99,20 @@ def get_images_todo_table(base, board_name):# WIP; NOT YET IMPLIMENTED!
         # Addressing
         image_id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)# Just a primary key. (I don't trust primary keys to work in the long-term. DBs need migrations, merges, ect sometimes.)
         # Todo-list meta
-        timestamp_todo_created# When this row was created, for pruning old entries.
-        timestamp_todo_exipre# When should this row be considered 'too old' and discarded wiwthout use?, for pruning old entries. (Should probably be less than a month in the future.)
+        timestamp_todo_created = sqlalchemy.Column(sqlalchemy.DateTime, nullable=True)# When this row was created, for pruning old entries.
+        timestamp_todo_exipre = sqlalchemy.Column(sqlalchemy.DateTime, nullable=True)# When should this row be considered 'too old' and discarded wiwthout use?, for pruning old entries. (Should probably be less than a month in the future.)
         # Any row with in_progress over 24Hrs ago should have it's inprogress info reset on the assumption that it is broken.
         in_progress_timestamp# Timestamp of attempt start if being downloaded, otherwise NULL for not yet started.
         in_progress# Is a download thread working on this? TRUE if being used, FALSE if not being used, NULL if we don't know what's happening.
         # Origin info. (Probably pointless to include.)
-        origin_post_num# Post number that triggered this item to be added to this table.
-        origin_thread_num# Thread containing post that added this entry.
-        origin_boardname# What is the shortname of the origin board?
-        expected_hash_md5# The MD5 hash we were told by the post(Is this worth having?)
+        origin_post_num = sqlalchemy.Column(sqlalchemy.Integer, nullable=True)# Post number that triggered this item to be added to this table.
+        origin_thread_num = sqlalchemy.Column(sqlalchemy.Integer, nullable=True)# Thread containing post that added this entry.
+        origin_boardname = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# What is the shortname of the origin board?
+        expected_hash_md5 = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# The MD5 hash we were told by the post(Is this worth having?)
         # Remote location. (The most important part of this table)
-        url_full_view# Fullsize.
-        url_thumb_reply# Reply thumbnail.
-        url_thumb_op# OP thumbnail.
+        url_full_view = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Fullsize.
+        url_thumb_reply = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Reply thumbnail.
+        url_thumb_op = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# OP thumbnail.
         # Files on disk.
         file_extension = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# File extention of the fullview file.
         filename_full = sqlalchemy.Column(sqlalchemy.Unicode, nullable=True)# Fullsized media file
