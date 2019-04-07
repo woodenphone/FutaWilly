@@ -97,7 +97,7 @@ def get_images_todo_table(base, board_name):# WIP; NOT YET IMPLIMENTED!
         """
         __tablename__ = table_name
         # Addressing
-        image_id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)# Just a primary key. (I don't trust primary keys to work in the long-term. DBs need migrations, merges, ect sometimes.)
+        pk = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True)# Just a primary key. (I don't trust primary keys to work in the long-term. DBs need migrations, merges, ect sometimes.)
         # Todo-list meta
         timestamp_todo_created = sqlalchemy.Column(sqlalchemy.DateTime, nullable=True)# When this row was created, for pruning old entries.
         timestamp_todo_exipre = sqlalchemy.Column(sqlalchemy.DateTime, nullable=True)# When should this row be considered 'too old' and discarded wiwthout use?, for pruning old entries. (Should probably be less than a month in the future.)

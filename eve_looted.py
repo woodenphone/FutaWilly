@@ -10,13 +10,32 @@
 # Copyright:   (c) Ctrl-S 2019
 # Licence:     <your licence>
 #-------------------------------------------------------------------------------
+# Imports
+# stdlib
+import os
+import logging
+import json
+import datetime
+import copy
+import hashlib
+import base64
+import binascii
+import time
+import shutil
+# Remote libraries
+#import flask
+import sqlalchemy
+import py8chan
+import requests
+# Local modules
+import common
+import config.futawilly_config as config
+from fuckups import *# Local Exceptions
+from database import get_threads_table, get_images_table, Base
 
 
 
-
-
-
-class MediaFetcher(object):
+class EveMediaFetcher(object):
     """Handles media downloads for a single board. Instantiated by each Board.
 
     doesn't support the old directory structure; does anyone care?"""
@@ -125,8 +144,50 @@ class MediaFetcher(object):
 
 
 
+class FutaMediaFetcher(object):
+    """This should be fed any undownloaded media when a thread is processed."""
+    def __init__(self, Thread, Image, TodoImage, Session, board_name):
+        self.Thread = Thread
+        self.Image = Image
+        self.TodoImage = TodoImage
+        self.board_name = board_name
 
+        self.mediaDLQueue = eventlet.queue.Queue()# Queue to hold TODO media
+        # We want a DB session all to oour own for this class instance. (So we don't fuck up other code's DB operations.)
+        self.db_ses = DBSession()# Instantiate the DB Session class.
+        return
 
+    def download(self, todo_pk):
+        # Make sure we know what we need to know to DL the file
+        todo_query = self.db_ses.query(self.TodoImage)\
+            .filter(self.TodoImage.pk == todo_pk)
+        todo_row = todo_row_query.first()
+        if (not todo_row):
+            logging.error('Could not load TODO row with todo_pk={0!r}'.format(todo_pk))
+            return
+        # DL the file
+        file_url = todo_row.url_full_view
+        filename_full = todo_row.filename_full
+        image_filepath = generate_media_filepath(
+                media_base_path=media_base_path,
+                media_type='image',# TODO: Validate that 'image' is what we're using for this value
+                filename=image.filename
+            )
+        temp_fn = '{0}.tmp'.format(todo_pk)
+        temp_path = os.path.join(config.temp_dir, self.board_name, temp_fn)
+        logging.debug('Saving file_url={0!r} to temp_path={1!r}'.format(file_url, temp_path))
+
+        # Move file once downloaded
+        logging.debug('Moving temp_path={0!r} to image_filepath={1!r}'.format(temp_path, image_filepath))
+        shutil.move(temp_path, image_filepath)
+        # Put the file in the DB
+        logging.debug('Creating DB row for image.')
+        media_row = self.Image(
+        )
+        self.db_ses.add(media_row)
+        self.db_ses.commit()
+        logging.debug('Saved image.')
+        return
 
 
 
