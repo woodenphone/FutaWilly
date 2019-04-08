@@ -26,6 +26,7 @@ import time
 import sqlalchemy
 import py8chan
 import requests
+import eventlet
 # Local modules
 import common
 import config.futawilly_config as config

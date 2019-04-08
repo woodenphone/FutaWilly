@@ -41,6 +41,7 @@ def image_dl_loop(board_name, db_ses):# TODO; WIP
         process_one_todo_image(db_ses, remove_failed=True)
 
 
+
 def prune_finished_todo_rows(db_ses, todo_table, board_name, minimum_age_hours_to_remove=24):# TODO; WIP
     # Calculate datetime for age comparison
     # Select some rows where both age > minimum and done == True
@@ -48,9 +49,14 @@ def prune_finished_todo_rows(db_ses, todo_table, board_name, minimum_age_hours_t
     return
 
 
-def downloader_thread_main(db_ses, board_name):# TODO; WIP
+def downloader_thread_main(engine, board_name):# TODO; WIP
     """Root of an image download thread."""
-
+    engine.dispose
+    Session = sqlalchemy.orm.sessionmaker(bind=engine)
+    db_ses = Session()# Create a session to interact with the DB.
+    image_dl_loop(board_name, db_ses)
+    logging.info('Downloader thread ending')
+    return
 
 
 def main():

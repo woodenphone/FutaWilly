@@ -191,6 +191,18 @@ class FutaMediaFetcher(object):
 
 
 
+
+
+
+def a_media_fetcher_thread(engine):
+    Session = sqlalchemy.orm.sessionmaker(bind=engine)
+    db_ses = Session()# Create a session to interact with the DB.
+    pass
+
+
+
+
+
 def main():
     pass
 
