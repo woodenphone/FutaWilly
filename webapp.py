@@ -25,7 +25,7 @@ def hello_world():
     return 'Hello, World.'
 
 
-
+# Display one thread
 @app.route('/view_thread/<board_name>/<thread_num>')
 def view_thread(board_name, thread_num):
     """Display one thread."""
@@ -34,6 +34,10 @@ def view_thread(board_name, thread_num):
     for post in posts:
         resp_data += ''.format()
     return 'TODO'
+
+
+# Display moderation tools
+# HAHA maybe later, until then mods can use python scripts with command-line args.
 
 
 
